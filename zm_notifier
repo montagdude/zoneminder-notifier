@@ -1,0 +1,171 @@
+#!/usr/bin/env python
+
+import sys
+import time
+from datetime import datetime, timedelta
+import subprocess
+from zm_api import ZMAPI
+
+def notify_new_event(addr, monitor, msg_file, img_file, img_url):
+
+    # Format strings and download image for MMS address
+
+    subject = "ZoneMinder alarm"
+    if addr['mms']:
+        message = "New event {:s} for monitor {:s}."\
+                  .format(monitor['last_eventid'], monitor['name'])
+    else:
+        message = ("New event {:s} for monitor {:s}.\n"
+                + "URL: {:s}").format(monitor['last_eventid'],
+                                      monitor['name'], img_url)
+
+    # Write message file
+
+    try:
+        f = open(msg_file, 'w')
+    except IOError:
+        sys.stderr.write("Cannot write to {:s}.\n".format(msg_file))
+        return
+    f.write("Subject: {:}\n\n".format(subject))
+    f.write("{:s}\n".format(message))
+    f.close()
+
+    # Send message
+
+    try:
+        stdin_file = open(msg_file)
+    except IOError:
+        sys.stderr.write("Cannot open {:s}.\n".format(msg_file))
+        return
+    if addr['mms']:
+        subprocess.call([mutt_location, '-a', img_file, "--", addr["address"]],
+                         stdin=stdin_file)
+    else:
+        subprocess.call([mutt_location, addr["address"]], stdin=stdin_file)
+    stdin_file.close()
+
+if __name__ == "__main__":
+
+    # local_server_address is the address used for all ZoneMinder API queries
+    # (for example, could be http://localhost or other local network address, or
+    # an external address if desired). world_server_address is the address sent
+    # in image URLs. The two do not necessarily need to be different.
+    
+    local_server_address = "edit_me"
+    world_server_address = "edit_me_too"
+    
+    # ZoneMinder credentials. (Yes, stored in plain text. Please ensure this
+    # script is secured. For example, owned and only readable by root.)
+    
+    username = "edit_ZoneMinder_username"
+    password = "edit_me_ZoneMinder_password"
+    
+    # Email settings. Uses mutt to send the email. It is up to you to configure
+    # mutt as desired (e.g., setting it up to use smtp vs sendmail).
+    
+    mutt_location = "/usr/bin/mutt"
+    tmp_message_file = "/tmp/zm_event_email.txt"
+    tmp_image_file = "/tmp/event_image.jpg"
+    
+    # If using an MMS gateway, the image will be attached to the message. If not,
+    # only the link will be sent (requires login to view). These can also be
+    # regular email addresses.
+
+    toaddrs = [{"address": "number@carrier_mms_gateway.com", "mms": True},
+               {"address": "number@carrier_sms_gateway.com", "mms": False}]
+
+    verify_ssl = False          # False is needed for self-signed certificate
+
+    running_timeout = 3         # How long to pause when checking for new events
+    stopped_timeout = 15        # How long to pause when checking if running
+    login_timeout = 1800        # Approx. how many seconds to wait between
+                                #   logins (to keep session alive). Should be
+                                #   at least every 60 minutes.
+    message_timeout = 1         # Pause after sending a message
+
+    # Login and store last login time
+
+    zm = ZMAPI(local_server_address, username, password, verify_ssl)
+    if not zm.login():
+        sys.exit(1)
+    last_login_time = datetime.now()
+    print("Successful login at {:s}"\
+          .format(last_login_time.strftime("%Y-%m-%d %H:%M:%S")))
+
+    rebuild_monitors = True
+    last_status = "Not running"
+    any_mms = False
+    for addr in toaddrs:
+        if addr['mms']:
+            any_mms = True
+            break
+    while 1:
+
+        sys.stdout.flush()
+        sys.stderr.flush()
+
+        # Login again if necessary to keep session active
+
+        current_time = datetime.now()
+        if current_time - last_login_time > timedelta(seconds=login_timeout):
+            if not zm.login():
+                sys.exit(1)
+            last_login_time = datetime.now()
+            print("Successful login at {:s}"\
+                  .format(last_login_time.strftime("%Y-%m-%d %H:%M:%S")))
+
+        # Check if ZoneMinder is running
+
+        if zm.getDaemonStatus():
+
+            if last_status == "Not running":
+                print("ZoneMinder is now running.")
+                last_status = "Running"
+
+            # Get list of monitors
+
+            if rebuild_monitors:
+                rebuild_monitors = False
+                monitors = zm.getMonitors(active_only=True)
+
+                # Get last event information for each monitor
+                for monitor in monitors:
+                    monitor['last_eventid'], monitor['maxscore_frameid'] = \
+                        zm.getMonitorLatestEvent(monitor['id'])
+
+            for monitor in monitors:
+                if not zm.getMonitorDaemonStatus(monitor['id']):
+                    sys.stderr.write("Warning: monitor {:s} has dropped out\n"\
+                                     .format(monitor['id']))
+                    rebuild_monitors = True
+                    continue
+
+                # Check for new event and send alert
+
+                last_eventid, maxscore_frameid = \
+                    zm.getMonitorLatestEvent(monitor['id'])
+                if last_eventid != monitor['last_eventid']:
+                    monitor['last_eventid'] = last_eventid
+                    monitor['maxscore_frameid'] = maxscore_frameid
+                    img_url = zm.getFrameURL(monitor['maxscore_frameid'])
+                    img_url = img_url.replace(local_server_address,
+                                              world_server_address)
+                    if any_mms:
+                        zm.getFrameImage(monitor['maxscore_frameid'],
+                                         tmp_image_file)
+                    for addr in toaddrs:
+                        notify_new_event(addr, monitor, tmp_message_file,
+                                         tmp_image_file, img_url)
+
+            time.sleep(running_timeout)
+
+        else:
+
+            if last_status == "Running":
+                print("ZoneMinder is no longer running.")
+                last_status = "Not running"
+
+            rebuild_monitors = True
+            time.sleep(stopped_timeout)
+
+    zm.logout()
