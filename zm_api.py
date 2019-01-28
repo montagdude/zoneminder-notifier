@@ -69,7 +69,7 @@ class ZMAPI:
                                 verify=self._verify_ssl)
 
         if response.ok:
-            status = response.json()['result']
+            status = int(response.json()['result'])
             if status == 1:
                 return True
         else:
@@ -91,15 +91,15 @@ class ZMAPI:
             data = response.json()
             for item in data['monitors']:
                 monitor = {}
-                monitor['id'] = item['Monitor_Status']['MonitorId']
-                monitor['name'] = item['Monitor']['Name']
+                monitor['id'] = int(item['Monitor_Status']['MonitorId'])
+                monitor['name'] = item['Monitor']['Name'].encode('ascii')
                 if active_only:
                     if self.getMonitorDaemonStatus(monitor['id']):
                         monitors.append(monitor)
-                        self.debug(1, "Appended monitor {:}"\
+                        self.debug(1, "Appended monitor {:d}"\
                                    .format(monitor['id']))
                 else:
-                    self.debug(1, "Appended monitor {:}".format(monitor['id']))
+                    self.debug(1, "Appended monitor {:d}".format(monitor['id']))
                     monitors.append(monitor)
         else:
             self.debug(1, "Connection error in getMonitors", "stderr")
@@ -110,7 +110,7 @@ class ZMAPI:
         # there is a connection error
 
         monitor_url = self._server \
-                    + "/zm/api/monitors/daemonStatus/id:{:s}/daemon:zmc.json" \
+                    + "/zm/api/monitors/daemonStatus/id:{:d}/daemon:zmc.json" \
                       .format(monitorID)
         response = requests.get(url=monitor_url, cookies=self._cookies,
                                 verify=self._verify_ssl)
@@ -118,9 +118,9 @@ class ZMAPI:
         if response.ok:
             data = response.json()
             status = data['status']
-            statustext = data['statustext']
+            statustext = data['statustext'].encode('ascii')
             if (not status) or \
-               statustext.encode('ascii').startswith('Unable to connect'):
+               statustext.startswith('Unable to connect'):
                 return False
             else:
                 return True
@@ -137,7 +137,7 @@ class ZMAPI:
         # First need to determine the number of pages
 
         monitor_url = self._server \
-                    + "/zm/api/events/index/MonitorID:{:s}.json?page=1"\
+                    + "/zm/api/events/index/MonitorID:{:d}.json?page=1"\
                       .format(monitorID)
         response = requests.get(url=monitor_url, cookies=self._cookies,
                                 verify=self._verify_ssl)
@@ -155,28 +155,29 @@ class ZMAPI:
                                            '%Y-%m-%d %H:%M:%S')
         for i in range(npages):
             monitor_url = self._server \
-                        + "/zm/api/events/index/MonitorID:{:s}.json?page={:d}"\
+                        + "/zm/api/events/index/MonitorID:{:d}.json?page={:d}"\
                           .format(monitorID, i)
             response = requests.get(url=monitor_url, cookies=self._cookies,
                                     verify=self._verify_ssl)
             data = response.json()
             for event in data['events']:
                 endTime = event['Event']['EndTime']
-                ID = event['Event']['Id']
+                ID = int(event['Event']['Id'])
                 if endTime is not None:
-                    endTime_obj = datetime.strptime(endTime,
+                    endTime_obj = datetime.strptime(endTime.encode('ascii'),
                                                     '%Y-%m-%d %H:%M:%S')
                     if endTime_obj > latest_endTime:
                         latest_endTime = endTime_obj
                         latest_eventid = ID
-                        maxscore_frameid = event['Event']['MaxScoreFrameId']
+                        maxscore_frameid = \
+                            int(event['Event']['MaxScoreFrameId'])
         return latest_eventid, maxscore_frameid
 
     def getFrameURL(self, frameid):
         # Returns url for the image specified by the given frameid
 
         return self._server \
-               + "/zm/index.php?view=image&fid={:s}&eid=&show=capture" \
+               + "/zm/index.php?view=image&fid={:d}&eid=&show=capture" \
                  .format(frameid)
 
     def getFrameImage(self, frameid, output_filename):

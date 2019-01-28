@@ -12,10 +12,10 @@ def notify_new_event(addr, monitor, msg_file, img_file, img_url):
 
     subject = "ZoneMinder alarm"
     if addr['mms']:
-        message = "New event {:s} for monitor {:s}."\
+        message = "New event {:d} for monitor {:s}."\
                   .format(monitor['last_eventid'], monitor['name'])
     else:
-        message = ("New event {:s} for monitor {:s}.\n"
+        message = ("New event {:d} for monitor {:s}.\n"
                 + "URL: {:s}").format(monitor['last_eventid'],
                                       monitor['name'], img_url)
 
@@ -78,7 +78,7 @@ if __name__ == "__main__":
 
     running_timeout = 3         # How long to pause when checking for new events
     stopped_timeout = 15        # How long to pause when checking if running
-    login_timeout = 1800        # Approx. how many seconds to wait between
+    login_timeout = 1200        # Approx. how many seconds to wait between
                                 #   logins (to keep session alive). Should be
                                 #   at least every 60 minutes.
     message_timeout = 1         # Pause after sending a message
@@ -136,7 +136,7 @@ if __name__ == "__main__":
             for monitor in monitors:
                 if not zm.getMonitorDaemonStatus(monitor['id']):
                     sys.stderr.write("Warning: monitor {:s} has dropped out\n"\
-                                     .format(monitor['id']))
+                                     .format(monitor['name']))
                     rebuild_monitors = True
                     continue
 
