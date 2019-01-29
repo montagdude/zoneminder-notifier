@@ -9,6 +9,7 @@ from datetime import datetime
 import urllib3
 urllib3.disable_warnings()  # Disable warnings about unverified SSL. The server
                             # uses my own self-signed certificate.
+import zm_util
 
 class ZMAPI:
 
@@ -24,10 +25,7 @@ class ZMAPI:
     def debug(self, level, message, pipe="stdout"):
 
         if level >= self._debug_level:
-            if pipe == "stderr":
-                sys.stderr.write("{:s}\n".format(message))
-            else:
-                print(message)
+            zm_util.debug(message, pipe)
 
     def login(self):
         # Logs in and returns True if successful, False otherwise
@@ -96,10 +94,11 @@ class ZMAPI:
                 if active_only:
                     if self.getMonitorDaemonStatus(monitor['id']):
                         monitors.append(monitor)
-                        self.debug(1, "Appended monitor {:d}"\
-                                   .format(monitor['id']))
+                        self.debug(1, "Appended monitor {:d}: {:s}"\
+                                   .format(monitor['id'], monitor['name']))
                 else:
-                    self.debug(1, "Appended monitor {:d}".format(monitor['id']))
+                    self.debug(1, "Appended monitor {:d}: {:s}"\
+                               .format(monitor['id'], monitor['name']))
                     monitors.append(monitor)
         else:
             self.debug(1, "Connection error in getMonitors", "stderr")

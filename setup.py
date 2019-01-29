@@ -4,6 +4,6 @@ from distutils.core import setup
 
 setup(name = "ZoneMinder_notifier",
       version = "0.1",
-      py_modules = ["zm_api"],
+      py_modules = ["zm_api", "zm_util"],
       scripts = ["zm_notifier"]
       )

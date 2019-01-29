@@ -4,9 +4,11 @@ import sys
 import time
 from datetime import datetime, timedelta
 import subprocess
+import zm_util
 from zm_api import ZMAPI
 
 def notify_new_event(addr, monitor, msg_file, img_file, img_url):
+    '''Sends notification email using mutt'''
 
     # Format strings and download image for MMS address
 
@@ -24,7 +26,7 @@ def notify_new_event(addr, monitor, msg_file, img_file, img_url):
     try:
         f = open(msg_file, 'w')
     except IOError:
-        sys.stderr.write("Cannot write to {:s}.\n".format(msg_file))
+        zm_util.debug("Cannot write to {:s}.\n".format(msg_file), "stderr")
         return
     f.write("Subject: {:}\n\n".format(subject))
     f.write("{:s}\n".format(message))
@@ -35,13 +37,13 @@ def notify_new_event(addr, monitor, msg_file, img_file, img_url):
     try:
         stdin_file = open(msg_file)
     except IOError:
-        sys.stderr.write("Cannot open {:s}.\n".format(msg_file))
+        zm_util.debug("Cannot open {:s}.\n".format(msg_file), "stderr")
         return
     if addr['mms']:
-        subprocess.call([mutt_location, '-a', img_file, "--", addr["address"]],
+        subprocess.call(['mutt', '-a', img_file, "--", addr["address"]],
                          stdin=stdin_file)
     else:
-        subprocess.call([mutt_location, addr["address"]], stdin=stdin_file)
+        subprocess.call(['mutt', addr["address"]], stdin=stdin_file)
     stdin_file.close()
 
 if __name__ == "__main__":
@@ -63,7 +65,6 @@ if __name__ == "__main__":
     # Email settings. Uses mutt to send the email. It is up to you to configure
     # mutt as desired (e.g., setting it up to use smtp vs sendmail).
     
-    mutt_location = "/usr/bin/mutt"
     tmp_message_file = "/tmp/zm_event_email.txt"
     tmp_image_file = "/tmp/event_image.jpg"
     
@@ -89,8 +90,7 @@ if __name__ == "__main__":
     if not zm.login():
         sys.exit(1)
     last_login_time = datetime.now()
-    print("Successful login at {:s}"\
-          .format(last_login_time.strftime("%Y-%m-%d %H:%M:%S")))
+    zm_util.debug("Successful login")
 
     rebuild_monitors = True
     last_status = "Not running"
@@ -111,15 +111,14 @@ if __name__ == "__main__":
             if not zm.login():
                 sys.exit(1)
             last_login_time = datetime.now()
-            print("Successful login at {:s}"\
-                  .format(last_login_time.strftime("%Y-%m-%d %H:%M:%S")))
+            zm_util.debug("Successful login")
 
         # Check if ZoneMinder is running
 
         if zm.getDaemonStatus():
 
             if last_status == "Not running":
-                print("ZoneMinder is now running.")
+                zm_util.debug("ZoneMinder is now running.")
                 last_status = "Running"
 
             # Get list of monitors
@@ -135,8 +134,8 @@ if __name__ == "__main__":
 
             for monitor in monitors:
                 if not zm.getMonitorDaemonStatus(monitor['id']):
-                    sys.stderr.write("Warning: monitor {:s} has dropped out\n"\
-                                     .format(monitor['name']))
+                    zm_util.debug("Warning: monitor {:s} has dropped out"\
+                                  .format(monitor['name'], "stderr"))
                     rebuild_monitors = True
                     continue
 
@@ -144,25 +143,30 @@ if __name__ == "__main__":
 
                 last_eventid, maxscore_frameid = \
                     zm.getMonitorLatestEvent(monitor['id'])
+                if last_eventid == 0:
+                    continue
                 if last_eventid != monitor['last_eventid']:
                     monitor['last_eventid'] = last_eventid
                     monitor['maxscore_frameid'] = maxscore_frameid
                     img_url = zm.getFrameURL(monitor['maxscore_frameid'])
                     img_url = img_url.replace(local_server_address,
                                               world_server_address)
+                    zm_util.debug("Sending event alerts for event {:d}"\
+                          .format(last_eventid))
                     if any_mms:
                         zm.getFrameImage(monitor['maxscore_frameid'],
                                          tmp_image_file)
                     for addr in toaddrs:
                         notify_new_event(addr, monitor, tmp_message_file,
                                          tmp_image_file, img_url)
+                        time.sleep(message_timeout)
 
             time.sleep(running_timeout)
 
         else:
 
             if last_status == "Running":
-                print("ZoneMinder is no longer running.")
+                zm_util.debug("ZoneMinder is no longer running.")
                 last_status = "Not running"
 
             rebuild_monitors = True
