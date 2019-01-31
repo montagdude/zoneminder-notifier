@@ -7,19 +7,27 @@ import subprocess
 import zm_util
 from zm_api import ZMAPI
 
-def notify_new_event(addr, monitor, msg_file, img_file, img_url):
-    '''Sends notification email using mutt'''
+def notify_new_event(addr, monitor, msg_file, img_file, img_url,
+                     detected_objects=None):
+    # Sends notification email using mutt
 
-    # Format strings and download image for MMS address
+    # Format subject and body of message 
 
     subject = "ZoneMinder alarm"
-    if addr['mms']:
-        message = "New event {:d} for monitor {:s}."\
-                  .format(monitor['last_eventid'], monitor['name'])
-    else:
-        message = ("New event {:d} for monitor {:s}.\n"
-                + "URL: {:s}").format(monitor['last_eventid'],
-                                      monitor['name'], img_url)
+
+    obj_string = ""
+    if detected_objects is not None:
+        for obj in detected_objects:
+            for key, value in obj.iteritems():
+                obj_string += "{:s}: {:.0f}%\n".format(key, value*100.)
+        obj_string.rstrip('\n')
+
+    message = "Motion detected by {:s}.\n".format(monitor['name'])
+    message += "Event {:d}\n".format(monitor['last_eventid'])
+    if len(obj_string) > 0:
+        message += obj_string
+    if not addr['mms']:
+        message += img_url
 
     # Write message file
 
@@ -29,7 +37,7 @@ def notify_new_event(addr, monitor, msg_file, img_file, img_url):
         zm_util.debug("Cannot write to {:s}.\n".format(msg_file), "stderr")
         return
     f.write("Subject: {:}\n\n".format(subject))
-    f.write("{:s}\n".format(message))
+    f.write(message)
     f.close()
 
     # Send message
@@ -59,8 +67,8 @@ if __name__ == "__main__":
     # ZoneMinder credentials. (Yes, stored in plain text. Please ensure this
     # script is secured. For example, owned and only readable by root.)
     
-    username = "edit_ZoneMinder_username"
-    password = "edit_me_ZoneMinder_password"
+    username = "my_ZoneMinder_username"
+    password = "my_ZoneMinder_password"
     
     # Email settings. Uses mutt to send the email. It is up to you to configure
     # mutt as desired (e.g., setting it up to use smtp vs sendmail).
@@ -82,7 +90,45 @@ if __name__ == "__main__":
     login_timeout = 1200        # Approx. how many seconds to wait between
                                 #   logins (to keep session alive). Should be
                                 #   at least every 60 minutes.
-    message_timeout = 1         # Pause after sending a message
+    message_timeout = 0         # Pause after sending a message
+
+    # Object detection settings. Uses OpenCV with to detect desired classes of
+    # objects (e.g., person, car) in the maxscore frame for each event. The
+    # primary purpose is to eliminate false alerts. However, depending on the
+    # settings, the detection may take up to a few seconds per frame.
+
+    detect_objects = True
+    detect_classes = ["person", "car", "dog"]
+
+    img_width = 320         # Normally 320, 416, or 608. Doesn't have to match
+    img_height = 320        # actual frame resolution. Lower is faster; higher
+                            # is more accurate.
+
+    conf_threshold = 0.25   # Ignore objects with confidence less than this
+
+    # These files should be present if YOLO v3 is installed. Can also use
+    # YOLO v3 tiny for fast detection, but it doesn't work very well.
+
+    detection_config = "path/to/yolov3.cfg"
+    detection_weights = "path/to/yolov3.weights"
+    detection_names = "path/to/coco.names"
+
+    # Once a requested class of objects is detected in a frame, you can
+    # use this to stop detecting for the desired number of seconds and just
+    # push notifications as quickly as possible. Set to 0 if you always want
+    # detection.
+
+    detection_suspend = 30
+
+    # Set up object detection
+
+    if detect_objects:
+        from zm_object_detection import Detector
+        detector = Detector(img_width, img_height, conf_threshold)
+
+        if not detector.setup(detection_config, detection_weights,
+                              detection_names):
+            sys.exit(1)
 
     # Login and store last login time
 
@@ -90,6 +136,7 @@ if __name__ == "__main__":
     if not zm.login():
         sys.exit(1)
     last_login_time = datetime.now()
+    last_detection_time = datetime.now()
     zm_util.debug("Successful login")
 
     rebuild_monitors = True
@@ -151,14 +198,44 @@ if __name__ == "__main__":
                     img_url = zm.getFrameURL(monitor['maxscore_frameid'])
                     img_url = img_url.replace(local_server_address,
                                               world_server_address)
-                    zm_util.debug("Sending event alerts for event {:d}"\
-                          .format(last_eventid))
-                    if any_mms:
+
+                    if any_mms or detect_objects:
                         zm.getFrameImage(monitor['maxscore_frameid'],
                                          tmp_image_file)
+
+                    # Do object detection
+
+                    current_time = datetime.now()
+                    detection_suspended = current_time - last_detection_time \
+                                        < timedelta(seconds=detection_suspend)
+
+                    matches = None
+                    if detect_objects and not detection_suspended:
+                        if detector.detect(tmp_image_file, detect_classes):
+                            matches = detector.matches()
+                            nmatches = len(matches)
+                            if nmatches == 0:
+                                msg = "No requested classes detected for "\
+                                    + "event {:d}".format(last_eventid)
+                                zm_util.debug(msg)
+                                continue    # Don't send alert
+                            else:
+                                detected_list = ""
+                                for match in matches:
+                                    for key in match:
+                                        detected_list += key + ", "
+                                detected_list = detected_list.rstrip(", ")
+                                msg = "Detected " + detected_list + " in "\
+                                    + "{:.2f} seconds"\
+                                    .format(detector.detectionTime())
+                                zm_util.debug(msg)
+                                last_detection_time = datetime.now()
+
+                    zm_util.debug("Sending event alerts for event {:d}"\
+                          .format(last_eventid))
                     for addr in toaddrs:
                         notify_new_event(addr, monitor, tmp_message_file,
-                                         tmp_image_file, img_url)
+                                         tmp_image_file, img_url, matches)
                         time.sleep(message_timeout)
 
             time.sleep(running_timeout)
