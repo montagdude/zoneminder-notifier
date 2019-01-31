@@ -4,6 +4,7 @@ import sys
 import time
 from datetime import datetime, timedelta
 import subprocess
+import ConfigParser
 import zm_util
 from zm_api import ZMAPI
 
@@ -56,69 +57,98 @@ def notify_new_event(addr, monitor, msg_file, img_file, img_url,
 
 if __name__ == "__main__":
 
-    # local_server_address is the address used for all ZoneMinder API queries
-    # (for example, could be http://localhost or other local network address, or
-    # an external address if desired). world_server_address is the address sent
-    # in image URLs. The two do not necessarily need to be different.
+    # Read config file
+
+    config = ConfigParser.ConfigParser()
+    config_file = '/etc/zm_notifier.cfg'
+    try:
+        f = open(config_file)
+    except IOError:
+        zm_util.debug("Error opening {:s}".format(config_file), "stderr")
+        sys.exit(1)
+    if len(config.read(config_file)) == 0:
+        zm_util.debug("Error parsing {:s}".format(config_file), "stderr")
+        sys.exit(1)
+
+    for section in ["ZoneMinderAPI", "Email", "Daemon", "Detection"]:
+        if not config.has_section(section):
+            zm_util.debug("No section {:s} found in {:s}".format(section,
+                          config_file), "stderr")
+            sys.exit(1)
+
+    # ZoneMinderAPI settings
+
+    local_server_address = zm_util.get_from_config(config, "ZoneMinderAPI",
+                                                   "local_server_address")
+    world_server_address = zm_util.get_from_config(config, "ZoneMinderAPI",
+                                                   "world_server_address")
+    username = zm_util.get_from_config(config, "ZoneMinderAPI", "username")
+    password = zm_util.get_from_config(config, "ZoneMinderAPI", "password")
+    verify_ssl = zm_util.get_bool_from_config(config, "ZoneMinderAPI",
+                                     "verify_ssl", required=False, default=True)
+
+    # Email settings
     
-    local_server_address = "edit_me"
-    world_server_address = "edit_me_too"
+    tmp_message_file = zm_util.get_from_config(config, "Email",
+                           "tmp_message_file", False, "/tmp/zm_event_email.txt")
+    tmp_image_file = zm_util.get_from_config(config, "Email", "tmp_image_file",
+                                             False, "/tmp/zm_event_image.txt")
     
-    # ZoneMinder credentials. (Yes, stored in plain text. Please ensure this
-    # script is secured. For example, owned and only readable by root.)
-    
-    username = "my_ZoneMinder_username"
-    password = "my_ZoneMinder_password"
-    
-    # Email settings. Uses mutt to send the email. It is up to you to configure
-    # mutt as desired (e.g., setting it up to use smtp vs sendmail).
-    
-    tmp_message_file = "/tmp/zm_event_email.txt"
-    tmp_image_file = "/tmp/event_image.jpg"
-    
-    # If using an MMS gateway, the image will be attached to the message. If not,
-    # only the link will be sent (requires login to view). These can also be
-    # regular email addresses.
+    addresses = zm_util.get_from_config(config, "Email", "addresses")
+    attach_image = zm_util.get_from_config(config, "Email", "attach_image")
+    addresses = addresses.replace(" ","")
+    addrs = addresses.split(",")
+    attach_image = attach_image.replace(" ","")
+    imgs = attach_image.split(",")
+    if len(addrs) != len(imgs):
+        zm_util.debug("Must specify attach_image for each address", "stderr")
+        sys.exit(1)
 
-    toaddrs = [{"address": "number@carrier_mms_gateway.com", "mms": True},
-               {"address": "number@carrier_sms_gateway.com", "mms": False}]
+    naddrs = len(addrs)
+    toaddrs = []
+    for i in range(naddrs):
+        toaddr = {"address": addrs[i]}
+        if (imgs[i] == "Yes") or (imgs[i] == "True"):
+            toaddr["mms"] = True
+        elif (imgs[i] == "No") or (imgs[i] == "False"):
+            toaddr["mms"] = False
+        else:
+            zm_util.debug("attach_image must be Yes/True/No/False", "stderr")
+            sys.exit(1)
+        toaddrs.append(toaddr)
 
-    verify_ssl = False          # False is needed for self-signed certificate
+    # Daemon settings
 
-    running_timeout = 3         # How long to pause when checking for new events
-    stopped_timeout = 15        # How long to pause when checking if running
-    login_timeout = 1200        # Approx. how many seconds to wait between
-                                #   logins (to keep session alive). Should be
-                                #   at least every 60 minutes.
-    message_timeout = 0         # Pause after sending a message
+    running_timeout = zm_util.get_int_from_config(config, "Daemon",
+                                   "running_timeout", required=False, default=3)
+    stopped_timeout = zm_util.get_int_from_config(config, "Daemon",
+                                   "stopped_timeout", required=False, default=3)
+    login_refresh = zm_util.get_int_from_config(config, "Daemon",
+                                  "login_refresh", required=False, default=1200)
 
-    # Object detection settings. Uses OpenCV with to detect desired classes of
-    # objects (e.g., person, car) in the maxscore frame for each event. The
-    # primary purpose is to eliminate false alerts. However, depending on the
-    # settings, the detection may take up to a few seconds per frame.
+    # Detection settings
 
-    detect_objects = True
-    detect_classes = ["person", "car", "dog"]
-
-    img_width = 320         # Normally 320, 416, or 608. Doesn't have to match
-    img_height = 320        # actual frame resolution. Lower is faster; higher
-                            # is more accurate.
-
-    conf_threshold = 0.25   # Ignore objects with confidence less than this
-
-    # These files should be present if YOLO v3 is installed. Can also use
-    # YOLO v3 tiny for fast detection, but it doesn't work very well.
-
-    detection_config = "path/to/yolov3.cfg"
-    detection_weights = "path/to/yolov3.weights"
-    detection_names = "path/to/coco.names"
-
-    # Once a requested class of objects is detected in a frame, you can
-    # use this to stop detecting for the desired number of seconds and just
-    # push notifications as quickly as possible. Set to 0 if you always want
-    # detection.
-
-    detection_suspend = 30
+    detect_objects = zm_util.get_bool_from_config(config, "Detection",
+                                 "detect_objects", required=False, default=True)
+    if detect_objects:
+        detect_classes = zm_util.get_from_config(config, "Detection",
+                             "detect_classes", required=False, default="person")
+        detect_classes = detect_classes.replace(" ","")
+        detect_classes = detect_classes.split(",")
+        img_width = zm_util.get_int_from_config(config, "Detection",
+                                       "img_width", required=False, default=416)
+        img_height = zm_util.get_int_from_config(config, "Detection",
+                                      "img_height", required=False, default=416)
+        conf_threshold = zm_util.get_float_from_config(config, "Detection",
+                                 "conf_threshold", required=False, default=0.25)
+        detection_config = zm_util.get_from_config(config, "Detection",
+                                                   "detection_config")
+        detection_weights = zm_util.get_from_config(config, "Detection",
+                                                   "detection_weights")
+        detection_names = zm_util.get_from_config(config, "Detection",
+                                                   "detection_names")
+        detection_suspend = zm_util.get_int_from_config(config, "Detection",
+                                 "detection_suspend", required=False, default=0)
 
     # Set up object detection
 
@@ -154,7 +184,7 @@ if __name__ == "__main__":
         # Login again if necessary to keep session active
 
         current_time = datetime.now()
-        if current_time - last_login_time > timedelta(seconds=login_timeout):
+        if current_time - last_login_time > timedelta(seconds=login_refresh):
             if not zm.login():
                 sys.exit(1)
             last_login_time = datetime.now()
@@ -236,7 +266,6 @@ if __name__ == "__main__":
                     for addr in toaddrs:
                         notify_new_event(addr, monitor, tmp_message_file,
                                          tmp_image_file, img_url, matches)
-                        time.sleep(message_timeout)
 
             time.sleep(running_timeout)
 
