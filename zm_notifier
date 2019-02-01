@@ -37,7 +37,6 @@ def notify_new_event(addr, monitor, msg_file, img_file, img_url,
     except IOError:
         zm_util.debug("Cannot write to {:s}.\n".format(msg_file), "stderr")
         return
-    f.write("Subject: {:}\n\n".format(subject))
     f.write(message)
     f.close()
 
@@ -49,10 +48,11 @@ def notify_new_event(addr, monitor, msg_file, img_file, img_url,
         zm_util.debug("Cannot open {:s}.\n".format(msg_file), "stderr")
         return
     if addr['mms']:
-        subprocess.call(['mutt', '-a', img_file, "--", addr["address"]],
-                         stdin=stdin_file)
+        subprocess.call(['mutt', '-s', subject, '-a', img_file, "--",
+                        addr["address"]], stdin=stdin_file)
     else:
-        subprocess.call(['mutt', addr["address"]], stdin=stdin_file)
+        subprocess.call(['mutt', '-s', subject, addr["address"]],
+                        stdin=stdin_file)
     stdin_file.close()
 
 if __name__ == "__main__":
