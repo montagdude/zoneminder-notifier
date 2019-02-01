@@ -14,12 +14,12 @@ to see if it has started.
 
 Requirements
 ================================================================================
-ZoneMinder with API enabled (tested with 1.32.3)
-Python 2.7 (tested with 2.7.15; has not been tested with Python 3)
-Python modules: requests, urllib3
-Mutt (to send notifications)
-OpenCV with deep neural network and Python bindings (if using object detection)
-YOLO v3 (if using object detection)
+* ZoneMinder with API enabled (tested with 1.32.3)
+* Python 2.7 (tested with 2.7.15; has not been tested with Python 3)
+* Python modules: requests, urllib3
+* Mutt (to send notifications)
+* OpenCV with deep neural network and Python bindings (if using object detection)
+* YOLO v3 (if using object detection)
 
 Installation
 ================================================================================
