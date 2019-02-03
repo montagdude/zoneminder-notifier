@@ -159,17 +159,22 @@ class ZMAPI:
             response = requests.get(url=monitor_url, cookies=self._cookies,
                                     verify=self._verify_ssl)
             data = response.json()
-            for event in data['events']:
-                endTime = event['Event']['EndTime']
-                ID = int(event['Event']['Id'])
-                if endTime is not None:
-                    endTime_obj = datetime.strptime(endTime.encode('ascii'),
-                                                    '%Y-%m-%d %H:%M:%S')
-                    if endTime_obj > latest_endTime:
-                        latest_endTime = endTime_obj
-                        latest_eventid = ID
-                        maxscore_frameid = \
-                            int(event['Event']['MaxScoreFrameId'])
+            try:
+                for event in data['events']:
+                    endTime = event['Event']['EndTime']
+                    ID = int(event['Event']['Id'])
+                    if endTime is not None:
+                        endTime_obj = datetime.strptime(endTime.encode('ascii'),
+                                                        '%Y-%m-%d %H:%M:%S')
+                        if endTime_obj > latest_endTime:
+                            latest_endTime = endTime_obj
+                            latest_eventid = ID
+                            maxscore_frameid = \
+                                int(event['Event']['MaxScoreFrameId'])
+            except KeyError:
+                debug(1, "No events list present", "stderr")
+                continue
+
         return latest_eventid, maxscore_frameid
 
     def getFrameURL(self, frameid):
