@@ -188,7 +188,6 @@ if __name__ == "__main__":
             if not zm.login():
                 sys.exit(1)
             last_login_time = datetime.now()
-            zm_util.debug("Successful login")
 
         # Check if ZoneMinder is running
 
