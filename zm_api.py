@@ -89,8 +89,13 @@ class ZMAPI:
             data = response.json()
             for item in data['monitors']:
                 monitor = {}
-                monitor['id'] = int(item['Monitor_Status']['MonitorId'])
-                monitor['name'] = item['Monitor']['Name'].encode('ascii')
+                try:
+                    monitor['id'] = int(item['Monitor_Status']['MonitorId'])
+                    monitor['name'] = item['Monitor']['Name'].encode('ascii')
+                except TypeError:
+                    self.debug(1, "No data available for new monitor. " +
+                               "Skipping.")
+                    continue
                 if active_only:
                     if self.getMonitorDaemonStatus(monitor['id']):
                         monitors.append(monitor)

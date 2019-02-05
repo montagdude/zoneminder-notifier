@@ -266,7 +266,12 @@ if __name__ == "__main__":
                         notify_new_event(addr, monitor, tmp_message_file,
                                          tmp_image_file, img_url, matches)
 
-            time.sleep(running_timeout)
+            # Wait longer for new monitors to possibly come online
+
+            if rebuild_monitors:
+                time.sleep(stopped_timeout)
+            else:
+                time.sleep(running_timeout)
 
         else:
 
