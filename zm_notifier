@@ -245,7 +245,9 @@ if __name__ == "__main__":
                             nmatches = len(matches)
                             if nmatches == 0:
                                 msg = "No requested classes detected for "\
-                                    + "event {:d}".format(last_eventid)
+                                    + "event {:d}\nProcessing time: {:.2f}"\
+                                    .format(last_eventid,
+                                            detector.DetectionTime())
                                 zm_util.debug(msg)
                                 continue    # Don't send alert
                             else:
