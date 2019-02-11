@@ -177,7 +177,7 @@ class ZMAPI:
                             maxscore_frameid = \
                                 int(event['Event']['MaxScoreFrameId'])
             except KeyError:
-                debug(1, "No events list present", "stderr")
+                self.debug(1, "No events list present", "stderr")
                 continue
 
         return latest_eventid, maxscore_frameid
