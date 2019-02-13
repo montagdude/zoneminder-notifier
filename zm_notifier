@@ -130,6 +130,8 @@ if __name__ == "__main__":
 
     detect_objects = zm_util.get_bool_from_config(config, "Detection",
                                  "detect_objects", required=False, default=True)
+    detection_suspend = zm_util.get_int_from_config(config, "Detection",
+                                 "detection_suspend", required=False, default=0)
     if detect_objects:
         detect_classes = zm_util.get_from_config(config, "Detection",
                              "detect_classes", required=False, default="person")
@@ -147,8 +149,6 @@ if __name__ == "__main__":
                                                    "detection_weights")
         detection_names = zm_util.get_from_config(config, "Detection",
                                                    "detection_names")
-        detection_suspend = zm_util.get_int_from_config(config, "Detection",
-                                 "detection_suspend", required=False, default=0)
 
     # Set up object detection
 
@@ -232,11 +232,11 @@ if __name__ == "__main__":
                         zm.getFrameImage(monitor['maxscore_frameid'],
                                          tmp_image_file)
 
-                    # Do object detection
-
                     current_time = datetime.now()
                     detection_suspended = current_time - last_detection_time \
                                         < timedelta(seconds=detection_suspend)
+
+                    # Do object detection
 
                     matches = None
                     if detect_objects and not detection_suspended:
