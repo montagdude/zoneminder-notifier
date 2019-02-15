@@ -153,11 +153,12 @@ class ZMAPI:
             return latest_eventid, maxscore_frameid
 
         # Loop through all events and get most recent one based on end time
+        # (loop backwards because latest events are on later pages)
 
         npages = response.json()['pagination']['pageCount']
         latest_endTime = datetime.strptime('1970-01-01 00:00:00',
                                            '%Y-%m-%d %H:%M:%S')
-        for i in range(npages):
+        for i in range(npages,0,-1):
             monitor_url = self._server \
                         + "/zm/api/events/index/MonitorID:{:d}.json?page={:d}"\
                           .format(monitorID, i)
