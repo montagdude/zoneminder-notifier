@@ -197,6 +197,10 @@ if __name__ == "__main__":
                 zm_util.debug("ZoneMinder is now running.")
                 last_status = "Running"
 
+                # Pause to ensure monitors are up by the time we query them
+
+                time.sleep(stopped_timeout)
+
             # Get list of monitors
 
             if rebuild_monitors:
