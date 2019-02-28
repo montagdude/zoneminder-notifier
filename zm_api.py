@@ -133,10 +133,13 @@ class ZMAPI:
                        "stderr")
             return False
 
-    def getMonitorLatestEvent(self, monitorID):
+    def getMonitorLatestEvent(self, monitorID, completed=True):
         # Returns the latest ID and max score frame ID event for a monitor. If
         # connection error occurs or there are no events for the monitor, both
-        # will be 0.
+        # will be 0. If completed=True, will only return events that have
+        # completed. If completed=False, will also return events that have
+        # started but not yet completed. In that case, max score frame ID is
+        # 0.
 
         # First need to determine the number of pages
 
@@ -156,8 +159,8 @@ class ZMAPI:
         # (loop backwards because latest events are on later pages)
 
         npages = response.json()['pagination']['pageCount']
-        latest_endTime = datetime.strptime('1970-01-01 00:00:00',
-                                           '%Y-%m-%d %H:%M:%S')
+        latest_eventtime = datetime.strptime('1970-01-01 00:00:00',
+                                             '%Y-%m-%d %H:%M:%S')
         for i in range(npages,0,-1):
             monitor_url = self._server \
                         + "/zm/api/events/index/MonitorID:{:d}.json?page={:d}"\
@@ -167,21 +170,31 @@ class ZMAPI:
             data = response.json()
             try:
                 for event in data['events']:
-                    endTime = event['Event']['EndTime']
                     ID = int(event['Event']['Id'])
-                    if endTime is not None:
-                        endTime_obj = datetime.strptime(endTime.encode('ascii'),
-                                                        '%Y-%m-%d %H:%M:%S')
-                        if endTime_obj > latest_endTime:
-                            latest_endTime = endTime_obj
+                    if not completed:
+                        time = event['Event']['StartTime']
+                    else:
+                        time = event['Event']['EndTime']
+                    if time is not None:
+                        time_obj = datetime.strptime(time.encode('ascii'),
+                                                     '%Y-%m-%d %H:%M:%S')
+                        if time_obj > latest_eventtime:
+                            latest_eventtime = time_obj
                             latest_eventid = ID
-                            maxscore_frameid = \
-                                int(event['Event']['MaxScoreFrameId'])
+                            if completed:
+                                maxscore_frameid = \
+                                    int(event['Event']['MaxScoreFrameId'])
             except KeyError:
                 self.debug(1, "No events list present", "stderr")
                 continue
 
         return latest_eventid, maxscore_frameid
+
+    def getMaxScoreURL(self, eventid):
+        # Returns url for max score frame in a given event
+
+        return self._server \
+               + "/zm/index.php?view=frame&eid={:d}&fid=0".format(eventid)
 
     def getFrameURL(self, frameid):
         # Returns url for the image specified by the given frameid
