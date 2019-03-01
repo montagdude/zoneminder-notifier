@@ -133,13 +133,10 @@ class ZMAPI:
                        "stderr")
             return False
 
-    def getMonitorLatestEvent(self, monitorID, completed=True):
+    def getMonitorLatestEvent(self, monitorID):
         # Returns the latest ID and max score frame ID event for a monitor. If
         # connection error occurs or there are no events for the monitor, both
-        # will be 0. If completed=True, will only return events that have
-        # completed. If completed=False, will also return events that have
-        # started but not yet completed. In that case, max score frame ID is
-        # 0.
+        # will be 0.
 
         # First need to determine the number of pages
 
@@ -155,7 +152,7 @@ class ZMAPI:
             self.debug(1, "Connection error in getMonitorLatestEvent", "stderr")
             return latest_eventid, maxscore_frameid
 
-        # Loop through all events and get most recent one based on end time
+        # Loop through all events and get most recent one based on start time
         # (loop backwards because latest events are on later pages)
 
         npages = response.json()['pagination']['pageCount']
@@ -171,19 +168,15 @@ class ZMAPI:
             try:
                 for event in data['events']:
                     ID = int(event['Event']['Id'])
-                    if not completed:
-                        time = event['Event']['StartTime']
-                    else:
-                        time = event['Event']['EndTime']
+                    time = event['Event']['StartTime']
                     if time is not None:
                         time_obj = datetime.strptime(time.encode('ascii'),
                                                      '%Y-%m-%d %H:%M:%S')
                         if time_obj > latest_eventtime:
                             latest_eventtime = time_obj
                             latest_eventid = ID
-                            if completed:
-                                maxscore_frameid = \
-                                    int(event['Event']['MaxScoreFrameId'])
+                            maxscore_frameid = \
+                                int(event['Event']['MaxScoreFrameId'])
             except KeyError:
                 self.debug(1, "No events list present", "stderr")
                 continue

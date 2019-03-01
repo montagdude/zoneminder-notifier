@@ -106,10 +106,12 @@ if __name__ == "__main__":
 
     naddrs = len(addrs)
     toaddrs = []
+    any_mms = False
     for i in range(naddrs):
         toaddr = {"address": addrs[i]}
         if (imgs[i] == "Yes") or (imgs[i] == "True"):
             toaddr["mms"] = True
+            any_mms = True
         elif (imgs[i] == "No") or (imgs[i] == "False"):
             toaddr["mms"] = False
         else:
@@ -125,8 +127,6 @@ if __name__ == "__main__":
                                    "stopped_timeout", required=False, default=3)
     login_refresh = zm_util.get_int_from_config(config, "Daemon",
                                   "login_refresh", required=False, default=1200)
-    notify_incomplete = zm_util.get_bool_from_config(config, "Daemon",
-                      "notify_incomplete_events", required=False, default=False)
 
     # Detection settings
 
@@ -151,24 +151,6 @@ if __name__ == "__main__":
                                                    "detection_weights")
         detection_names = zm_util.get_from_config(config, "Detection",
                                                    "detection_names")
-
-    any_mms = False
-    for addr in toaddrs:
-        if addr['mms']:
-            any_mms = True
-            break
-
-    # Disable detection and image attachments if notify_incomplete is enabled
-
-    if notify_incomplete:
-        if any_mms:
-            zm_util.debug("notify_incomplete_events disables image attachment.")
-            any_mms = False
-            for addr in toaddrs:
-                addr['mms'] = False
-        if detect_objects:
-            zm_util.debug("notify_incomplete_events disables object detection.")
-            detect_objects = False
 
     # Set up object detection
 
@@ -237,17 +219,13 @@ if __name__ == "__main__":
                 # Check for new event and send alert
 
                 last_eventid, maxscore_frameid = \
-                    zm.getMonitorLatestEvent(monitor['id'],
-                                             not notify_incomplete)
+                    zm.getMonitorLatestEvent(monitor['id'])
                 if last_eventid == 0:
                     continue
                 if last_eventid != monitor['last_eventid']:
                     monitor['last_eventid'] = last_eventid
                     monitor['maxscore_frameid'] = maxscore_frameid
-                    if notify_incomplete:
-                        img_url = zm.getMaxScoreURL(monitor['last_eventid'])
-                    else:
-                        img_url = zm.getFrameURL(monitor['maxscore_frameid'])
+                    img_url = zm.getFrameURL(monitor['maxscore_frameid'])
                     img_url = img_url.replace(local_server_address,
                                               world_server_address)
 
