@@ -139,6 +139,10 @@ if __name__ == "__main__":
                              "detect_classes", required=False, default="person")
         detect_classes = detect_classes.replace(" ","")
         detect_classes = detect_classes.split(",")
+        exclude_monitors = zm_util.get_from_config(config, "Detection",
+                                 "exclude_monitors", required=False, default="")
+        exclude_monitors = exclude_monitors.replace(" ","")
+        exclude_monitors = exclude_monitors.split(",")
         img_width = zm_util.get_int_from_config(config, "Detection",
                                        "img_width", required=False, default=416)
         img_height = zm_util.get_int_from_config(config, "Detection",
@@ -205,9 +209,29 @@ if __name__ == "__main__":
                 monitors = zm.getMonitors(active_only=True)
 
                 # Get last event information for each monitor
+
                 for monitor in monitors:
                     monitor['last_eventid'], monitor['maxscore_frameid'] = \
                         zm.getMonitorLatestEvent(monitor['id'])
+                    monitor['detection'] = detect_objects
+
+                # Determine if we are doing object detection on each monitor
+
+                for name in exclude_monitors:
+                    name_found = False
+                    for monitor in monitors:
+                        if name == monitor['name']:
+                            monitor['detection'] = False
+                            name_found = True
+                            break
+                    if name_found:
+                        zm_util.debug("Not doing object detection on " +
+                                      "monitor {:s}".format(name))
+                    else:
+                        zm_util.debug("Warning: no active monitor named {:s}"\
+                                      .format(name))
+
+            # Check for dropped out monitors
 
             for monitor in monitors:
                 if not zm.getMonitorDaemonStatus(monitor['id']):
@@ -229,7 +253,7 @@ if __name__ == "__main__":
                     img_url = img_url.replace(local_server_address,
                                               world_server_address)
 
-                    if any_mms or detect_objects:
+                    if any_mms or monitor['detection']:
                         zm.getFrameImage(monitor['maxscore_frameid'],
                                          tmp_image_file)
 
@@ -240,7 +264,7 @@ if __name__ == "__main__":
                     # Do object detection
 
                     matches = None
-                    if detect_objects and not detection_suspended:
+                    if monitor['detection'] and not detection_suspended:
                         if detector.detect(tmp_image_file, detect_classes):
                             matches = detector.matches()
                             nmatches = len(matches)
