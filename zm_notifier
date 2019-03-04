@@ -217,19 +217,20 @@ if __name__ == "__main__":
 
                 # Determine if we are doing object detection on each monitor
 
-                for name in exclude_monitors:
-                    name_found = False
-                    for monitor in monitors:
-                        if name == monitor['name']:
-                            monitor['detection'] = False
-                            name_found = True
-                            break
-                    if name_found:
-                        zm_util.debug("Not doing object detection on " +
-                                      "monitor {:s}".format(name))
-                    else:
-                        zm_util.debug("Warning: no active monitor named {:s}"\
-                                      .format(name))
+                if detect_objects:
+                    for name in exclude_monitors:
+                        name_found = False
+                        for monitor in monitors:
+                            if name == monitor['name']:
+                                monitor['detection'] = False
+                                name_found = True
+                                break
+                        if name_found:
+                            zm_util.debug("Not doing object detection on " +
+                                          "monitor {:s}".format(name))
+                        else:
+                            zm_util.debug("Warning: no active monitor named " +
+                                          "{:s}".format(name))
 
             # Check for dropped out monitors
 
