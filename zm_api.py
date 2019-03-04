@@ -6,6 +6,7 @@
 import sys
 import requests
 from datetime import datetime
+import time
 import urllib3
 urllib3.disable_warnings()  # Disable warnings about unverified SSL. The server
                             # uses my own self-signed certificate.
@@ -196,22 +197,35 @@ class ZMAPI:
                + "/zm/index.php?view=image&fid={:d}&eid=&show=capture" \
                  .format(frameid)
 
-    def getFrameImage(self, frameid, output_filename):
+    def getFrameImage(self, frameid, output_filename, max_attempts=5):
         # Downloads image specified by frameid to the given filename. Returns
-        # True if everything succeeded, or False otherwise.
+        # True if everything succeeded, or False otherwise. On connection error,
+        # will try max_attempts times, pausing for 1 second in between each try.
 
         frame_url = self.getFrameURL(frameid)
-        response = requests.get(url=frame_url, cookies=self._cookies,
-                                verify=self._verify_ssl)
-        if response.ok:
-            try:
-                f = open(output_filename, 'wb')
-            except IOError:
-                self.debug(1, "Error opening file {:s}".format(output_filename),
-                           "stderr")
-                return False
-            f.write(response.content)
-            self.debug(1, "Saved image {:s}.".format(output_filename))
-            return True
-        else:
-            return False
+
+        attempt = 1
+        while attempt <= max_attempts:
+            response = requests.get(url=frame_url, cookies=self._cookies,
+                                    verify=self._verify_ssl)
+            if response.ok:
+                try:
+                    f = open(output_filename, 'wb')
+                except IOError:
+                    self.debug(1, "Error opening file {:s}"\
+                               .format(output_filename), "stderr")
+                    return False
+                f.write(response.content)
+                if attempt > 1:
+                    self.debug(1, ("Downloaded image {:s} after {:d} attempts."\
+                                   .format(output_filename, attempt)))
+                else:
+                    self.debug(1, "Downloaded image {:s}."\
+                               .format(output_filename))
+                return True
+            else:
+                attempt += 1
+                time.sleep(1)
+
+        self.debug(1, "Connection error in getFrameImage", "stderr")
+        return False

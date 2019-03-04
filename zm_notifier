@@ -5,6 +5,7 @@ import time
 from datetime import datetime, timedelta
 import subprocess
 import ConfigParser
+from copy import copy
 import zm_util
 from zm_api import ZMAPI
 
@@ -254,9 +255,10 @@ if __name__ == "__main__":
                     img_url = img_url.replace(local_server_address,
                                               world_server_address)
 
+                    hasimg = True
                     if any_mms or monitor['detection']:
-                        zm.getFrameImage(monitor['maxscore_frameid'],
-                                         tmp_image_file)
+                        hasimg = zm.getFrameImage(monitor['maxscore_frameid'],
+                                                  tmp_image_file)
 
                     current_time = datetime.now()
                     detection_suspended = current_time - last_detection_time \
@@ -265,7 +267,8 @@ if __name__ == "__main__":
                     # Do object detection
 
                     matches = None
-                    if monitor['detection'] and not detection_suspended:
+                    if monitor['detection'] and not detection_suspended \
+                                            and hasimg:
                         if detector.detect(tmp_image_file, detect_classes):
                             matches = detector.matches()
                             nmatches = len(matches)
@@ -291,7 +294,10 @@ if __name__ == "__main__":
                     zm_util.debug("Sending event alerts for event {:d}"\
                           .format(last_eventid))
                     for addr in toaddrs:
-                        notify_new_event(addr, monitor, tmp_message_file,
+                        # If image failed to download, just send the link
+                        useaddr = copy(addr)
+                        useaddr['mms'] = hasimg
+                        notify_new_event(useaddr, monitor, tmp_message_file,
                                          tmp_image_file, img_url, matches)
 
             # Wait longer for new monitors to possibly come online
