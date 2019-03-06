@@ -296,7 +296,7 @@ if __name__ == "__main__":
                     for addr in toaddrs:
                         # If image failed to download, just send the link
                         useaddr = copy(addr)
-                        useaddr['mms'] = hasimg
+                        useaddr['mms'] = useaddr['mms'] and hasimg
                         notify_new_event(useaddr, monitor, tmp_message_file,
                                          tmp_image_file, img_url, matches)
 
