@@ -1,6 +1,6 @@
 import sys
 from datetime import datetime
-import ConfigParser
+from configparser import ConfigParser
 
 def debug(message, pipe="stdout"):
 

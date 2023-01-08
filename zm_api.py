@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-#
 # Some portions of this class influenced by the pyzm project, so thanks for that.
 
 import requests
@@ -165,51 +163,39 @@ class ZMAPI:
            res['id']: eventid (0 by default or on error)
            res['maxscore_frameid']: frameid of maxscore (0 by default)
            res['path']: filesystem path of the event on the server ("" by default)
-           res['video_name']: file name of the video ("" by default)'''
+           res['video_name']: file name of the video ("" by default)
+
+           Note: normally when searching events, you'd need to get the number of pages as follows:
+               monitor_url = self.apipath + '/events/index/MonitorId:{:d}.json'\
+                                            .format(monitorID)
+               r = self._makeRequest(monitor_url, params=['page=1'])
+               if not r.ok:
+                   return res
+               rj = r.json()
+               npages = rj['pagination']['pageCount']
+           and then loop over pages to find the latest event. This process is described in the API
+           documentation. However, due to the way the API sorts events, the first result on the
+           first page will be the latest event for the monitor.'''
 
         res = {'id':0, 'maxscore_frameid':0, 'path':"", 'video_name':""}
 
-        # Determine the number of pages
-        monitor_url = self.apipath + '/events/index/MonitorId:{:d}.json'\
-                                     .format(monitorID)
-        r = self._makeRequest(monitor_url, params=['page=1'])
+        # Get the list of events for this monitor in descending order based on EndTime
+        monitor_url = self.apipath + '/events/index/MonitorId:{:d}.json'.format(monitorID)
+        r = self._makeRequest(monitor_url, params=['page=1', 'sort=EndTime', 'direction=desc'])
         if not r.ok:
-            print(r.status_code)
-            self.debug(1, "Error getting number of pages in getMonitorLatestEvent", "stderr")
+            self.debug(1, "Error getting events in getMonitorLatestEvent", "stderr")
             return res
         rj = r.json()
-        npages = rj['pagination']['pageCount']
-        dt_fmt = '%Y-%m-%d %H:%M:%S'
-        latest_eventtime = datetime.datetime.strptime('1970-01-01 00:00:00', dt_fmt)
 
-        # Loop through all events and get the most recent one based on end time.
-        # TODO: is it really necessary to go through all the pages? The API sorts by StartDateTime
-        # already, so the last page should have the latest events. Check once I have more than 100
-        # events, which is the hardcoded pagination setting in the API source code.
-        for i in range(npages, 0, -1):
-            # Get the list of events for this monitor in descending order based on EndTime
-            monitor_url = self.apipath + '/events/index/MonitorId:{:d}.json'.format(monitorID)
-            r = self._makeRequest(monitor_url, params=['page={:d}'.format(i), 'sort=EndTime',
-                                                       'direction=desc'])
-            if not r.ok:
-                self.debug(1, "Error getting page of events in getMonitorLatestEvent", "stderr")
-                return res
-            rj = r.json()
-
-            # Since the list is already sorted, the first in the list will be the latest one
-            events = rj['events']
-            if len(events) > 0:
-                event = events[0]
-                ID = int(event['Event']['Id'])
-                eventtime = event['Event']['EndTime']
-                if eventtime is not None:
-                    time_obj = datetime.datetime.strptime(eventtime, dt_fmt)
-                    if time_obj > latest_eventtime:
-                        latest_eventtime = time_obj
-                        res['id'] = ID
-                        res['maxscore_frameid'] = int(event['Event']['MaxScoreFrameId'])
-                        res['path'] = event['Event']['FileSystemPath']
-                        res['video_name'] = event['Event']['DefaultVideo']
+        # Since the list is already sorted, the first in the list will be the latest one
+        events = rj['events']
+        if len(events) > 0:
+            event = events[0]
+            ID = int(event['Event']['Id'])
+            res['id'] = ID
+            res['maxscore_frameid'] = int(event['Event']['MaxScoreFrameId'])
+            res['path'] = event['Event']['FileSystemPath']
+            res['video_name'] = event['Event']['DefaultVideo']
 
         return res
 
