@@ -1,101 +1,150 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
-# Thanks to the zm-py project for showing me how to do the API requests in
-# Python. Some ideas for the ZMAPI class are taken from there too.
+# Some portions of this class influenced by the pyzm project, so thanks for that.
 
-import sys
 import requests
-from datetime import datetime
 import time
-import urllib3
-urllib3.disable_warnings()  # Disable warnings about unverified SSL. The server
-                            # uses my own self-signed certificate.
+import datetime
 import zm_util
+# If you have a webserver serving HTTPS with a self-signed certificate, you
+# may want to uncomment the line below.
+#import urllib3
+#urllib3.disable_warnings()
 
 class ZMAPI:
+    def __init__(self, server, username, password, verify_ssl=True, debug_level=1):
+        self.username = username
+        self.password = password
+        self.verify = verify_ssl
+        self.debug_level = debug_level
 
-    def __init__(self, server, username, password, verify_ssl=True,
-                 debug_level=1):
-        self._server = server.rstrip('/')
-        self._username = username
-        self._password = password
-        self._verify_ssl = verify_ssl
-        self._cookies = None
-        self._debug_level = debug_level
+        self.apipath = server + '/zm/api'
+        self.webpath = server + '/zm/index.php'
+        self.access_init = None
+        self.refresh_init = None
 
-    def debug(self, level, message, pipe="stdout"):
+        self.access_token = None
+        self.access_timeout = 0
+        self.refresh_token = None
+        self.refresh_timeout = 0
 
-        if level >= self._debug_level:
-            zm_util.debug(message, pipe)
-
-    def login(self):
-        # Logs in and returns True if successful, False otherwise
-
-        login_post = {'user': self._username, 'pass': self._password}
-        login_url = self._server + "/zm/api/host/login.json"
-        response = requests.post(url=login_url, data=login_post,
-                                 verify=self._verify_ssl)
-        self._cookies = response.cookies
-
-        # Check if login was successful (note request above returns request.ok
-        # even if the wrong username and password were supplied)
-
-        version_url = self._server + '/zm/api/host/getVersion.json'
-        response = requests.get(url=version_url, cookies=self._cookies,
-                                verify=self._verify_ssl)
-        if not response.ok:
-            self.debug(1, "Error logging into ZoneMinder", "stderr")
-            return False
-        else:
+    def _needAccess(self, access_buffer=300):
+        '''Checks if we need a new access token (soon or already)'''
+        if self.access_token is None or self._access_timeout <= time.time()+access_buffer:
             return True
-
-    def logout(self):
-        # Logs out and returns True if successful, False otherwise
-
-        logout_url = self._server + "/zm/api/host/logout.json"
-        response = requests.get(url=logout_url, verify=self._verify_ssl)
-        if response.ok:
-            return True
-        else:
-            self.debug(1, "Connection error in logout", "stderr")
-            return False
-
-    def getDaemonStatus(self):
-        # Returns True if ZoneMinder is running, False if not or on error
-
-        daemon_url = self._server + "/zm/api/host/daemonCheck.json"
-        response = requests.get(url=daemon_url, cookies = self._cookies,
-                                verify=self._verify_ssl)
-
-        if response.ok:
-            status = int(response.json()['result'])
-            if status == 1:
-                return True
-        else:
-            self.debug(1, "Connection error in getDaemonStatus", "stderr")
-
         return False
 
+    def _needRefresh(self, refresh_buffer=600):
+        '''Checks if we need a new refresh token (soon or already)'''
+
+        if self.refresh_token is None or self.refresh_timeout <= time.time()+refresh_buffer:
+            return True
+        return False
+
+    def _refreshTokens(self):
+        '''Refreshes tokens if needed'''
+
+        if self._needRefresh():
+            # Get new tokens via username and password if the refresh token has expired
+            check = self.login(method='password')
+        else:
+            # Get a new access token if needed. Otherwise take no action.
+            if self._needAccess():
+                check = self.login(method='refresh_token')
+        return check
+
+    def _makeRequest(self, url, params=[]):
+        '''Makes a request to the API, appending access token, and returns response.
+           params is a list of options to be appended at the end of the url (other
+           than the access token)'''
+
+        self._refreshTokens()
+        access_url = url + '?token={:s}'.format(self.access_token)
+        for item in params:
+            access_url += '&' + item
+        return requests.get(access_url, verify=self.verify)
+
+    def debug(self, level, message, pipename='stdout'):
+        if level >= self.debug_level:
+            zm_util.debug("zm_api: " + message, pipename)
+
+    def login(self, method='password'):
+        '''Performs login and saves access and refresh tokens. Returns True if successful
+           and False if not.'''
+
+        login_url = self.apipath + '/host/login.json'
+        if method == 'password' or self._needRefresh():
+            login_data = {'user': self.username, 'pass': self.password}
+        else:
+            login_data = {'token': self.refresh_token}
+        r = requests.post(url=login_url, data=login_data, verify=self.verify)
+        if r.ok:
+            rj = r.json()
+            self.access_token = rj['access_token']
+            self.access_timeout = float(rj['access_token_expires']) + time.time()
+            self.refresh_token = rj['refresh_token']
+            self.refresh_token_timeout = float(rj['refresh_token_expires']) + time.time()
+            api_version = rj['apiversion']
+            if api_version != '2.0':
+                self.debug(1, "API version 2.0 required.", "stderr")
+                return False
+            access_init = time.time()
+            refresh_init = time.time()
+        else:
+            self.debug(1, "Login failed with status {:d}.".format(r.status_code), "stderr")
+            return False
+
+        return True
+
+    def logout(self):
+        '''Logs out of the API and returns True if successful, False if not'''
+
+        logout_url = self.apipath + '/host/logout.json'
+        r = self._makeRequest(logout_url)
+        return r.ok
+
+    def getDaemonStatus(self):
+        '''Returns True if ZoneMinder is running, False if not or on error'''
+
+        daemon_url = self.apipath + '/host/daemonCheck.json'
+        r = self._makeRequest(daemon_url)
+        if r.ok:
+            status = int(r.json()['result'])
+            return status == 1
+        else:
+            self.debug(1, "Connection error in getDaemonStatus", "stderr")
+        return False
+
+    def getMonitorDaemonStatus(self, monitorID):
+        '''Returns True if a monitor is active, False if not or on error'''
+
+        monitor_url = self.apipath + '/monitors/daemonStatus/id:{:d}/daemon:zmc.json' \
+                                     .format(monitorID)
+        r = self._makeRequest(monitor_url)
+        if r.ok:
+            rj = r.json()
+            status = rj['status']
+            return rj['status']
+        else:
+            self.debug(1, "Connection error in getMonitorDaemonStatus", "stderr")
+            return False
+
     def getMonitors(self, active_only=False):
-        # Gets list of monitors and distills it to just the monitor's ID and
-        # name. If you only want active monitors, use active_only=True.
-        # Monitor list will be empty if connection error occurs.
+        '''Returns a list of monitor ids and names, optionally only the monitors
+           that are active. List will be emtpy if a connection error occurs.'''
 
-        monitors_url = self._server + "/zm/api/monitors.json"
-        response = requests.get(url=monitors_url, cookies=self._cookies,
-                                verify=self._verify_ssl)
-
+        monitors_url = self.apipath + '/monitors.json'
+        r = self._makeRequest(monitors_url)
         monitors = []
-        if response.ok:
-            data = response.json()
-            for item in data['monitors']:
+        if r.ok:
+            rj = r.json()
+            for item in rj['monitors']:
                 monitor = {}
                 try:
                     monitor['id'] = int(item['Monitor_Status']['MonitorId'])
-                    monitor['name'] = item['Monitor']['Name'].encode('ascii')
+                    monitor['name'] = item['Monitor']['Name']
                 except TypeError:
-                    self.debug(1, "No data available for new monitor. " +
-                               "Skipping.")
+                    self.debug(1, "No data available for monitor. Skipping.")
                     continue
                 if active_only:
                     if self.getMonitorDaemonStatus(monitor['id']):
@@ -103,129 +152,67 @@ class ZMAPI:
                         self.debug(1, "Appended monitor {:d}: {:s}"\
                                    .format(monitor['id'], monitor['name']))
                 else:
+                    monitors.append(monitor)
                     self.debug(1, "Appended monitor {:d}: {:s}"\
                                .format(monitor['id'], monitor['name']))
-                    monitors.append(monitor)
         else:
             self.debug(1, "Connection error in getMonitors", "stderr")
+
         return monitors
 
-    def getMonitorDaemonStatus(self, monitorID):
-        # Returns True if daemon is running for monitor, False if not or if
-        # there is a connection error
-
-        monitor_url = self._server \
-                    + "/zm/api/monitors/daemonStatus/id:{:d}/daemon:zmc.json" \
-                      .format(monitorID)
-        response = requests.get(url=monitor_url, cookies=self._cookies,
-                                verify=self._verify_ssl)
-
-        if response.ok:
-            data = response.json()
-            status = data['status']
-            statustext = data['statustext'].encode('ascii')
-            if (not status) or \
-               statustext.startswith('Unable to connect'):
-                return False
-            else:
-                return True
-        else:
-            self.debug(1, "Connection error in getMonitorDaemonStatus",
-                       "stderr")
-            return False
-
     def getMonitorLatestEvent(self, monitorID):
-        # Returns the latest ID and max score frame ID event for a monitor. If
-        # connection error occurs or there are no events for the monitor, both
-        # will be 0.
+        '''Returns pertinent information about the latest event for a monitor.
+           res['id']: eventid (0 by default or on error)
+           res['maxscore_frameid']: frameid of maxscore (0 by default)
+           res['path']: filesystem path of the event on the server ("" by default)
+           res['video_name']: file name of the video ("" by default)'''
 
-        # First need to determine the number of pages
+        res = {'id':0, 'maxscore_frameid':0, 'path':"", 'video_name':""}
 
-        monitor_url = self._server \
-                    + "/zm/api/events/index/MonitorID:{:d}.json?page=1"\
-                      .format(monitorID)
-        response = requests.get(url=monitor_url, cookies=self._cookies,
-                                verify=self._verify_ssl)
+        # Determine the number of pages
+        monitor_url = self.apipath + '/events/index/MonitorId:{:d}.json'\
+                                     .format(monitorID)
+        r = self._makeRequest(monitor_url, params=['page=1'])
+        if not r.ok:
+            print(r.status_code)
+            self.debug(1, "Error getting number of pages in getMonitorLatestEvent", "stderr")
+            return res
+        rj = r.json()
+        npages = rj['pagination']['pageCount']
+        dt_fmt = '%Y-%m-%d %H:%M:%S'
+        latest_eventtime = datetime.datetime.strptime('1970-01-01 00:00:00', dt_fmt)
 
-        latest_eventid = 0
-        maxscore_frameid = 0
-        if not response.ok:
-            self.debug(1, "Connection error in getMonitorLatestEvent", "stderr")
-            return latest_eventid, maxscore_frameid
+        # Loop through all events and get the most recent one based on end time.
+        # TODO: is it really necessary to go through all the pages? The API sorts by StartDateTime
+        # already, so the last page should have the latest events. Check once I have more than 100
+        # events, which is the hardcoded pagination setting in the API source code.
+        for i in range(npages, 0, -1):
+            # Get the list of events for this monitor in descending order based on EndTime
+            monitor_url = self.apipath + '/events/index/MonitorId:{:d}.json'.format(monitorID)
+            r = self._makeRequest(monitor_url, params=['page={:d}'.format(i), 'sort=EndTime',
+                                                       'direction=desc'])
+            if not r.ok:
+                self.debug(1, "Error getting page of events in getMonitorLatestEvent", "stderr")
+                return res
+            rj = r.json()
 
-        # Loop through all events and get most recent one based on start time
-        # (loop backwards because latest events are on later pages)
+            # Since the list is already sorted, the first in the list will be the latest one
+            events = rj['events']
+            if len(events) > 0:
+                event = events[0]
+                ID = int(event['Event']['Id'])
+                eventtime = event['Event']['EndTime']
+                if eventtime is not None:
+                    time_obj = datetime.datetime.strptime(eventtime, dt_fmt)
+                    if time_obj > latest_eventtime:
+                        latest_eventtime = time_obj
+                        res['id'] = ID
+                        res['maxscore_frameid'] = int(event['Event']['MaxScoreFrameId'])
+                        res['path'] = event['Event']['FileSystemPath']
+                        res['video_name'] = event['Event']['DefaultVideo']
 
-        npages = response.json()['pagination']['pageCount']
-        latest_eventtime = datetime.strptime('1970-01-01 00:00:00',
-                                             '%Y-%m-%d %H:%M:%S')
-        for i in range(npages,0,-1):
-            monitor_url = self._server \
-                        + "/zm/api/events/index/MonitorID:{:d}.json?page={:d}"\
-                          .format(monitorID, i)
-            response = requests.get(url=monitor_url, cookies=self._cookies,
-                                    verify=self._verify_ssl)
-            data = response.json()
-            try:
-                for event in data['events']:
-                    ID = int(event['Event']['Id'])
-                    time = event['Event']['StartTime']
-                    if time is not None:
-                        time_obj = datetime.strptime(time.encode('ascii'),
-                                                     '%Y-%m-%d %H:%M:%S')
-                        if time_obj > latest_eventtime:
-                            latest_eventtime = time_obj
-                            latest_eventid = ID
-                            maxscore_frameid = \
-                                int(event['Event']['MaxScoreFrameId'])
-            except KeyError:
-                self.debug(1, "No events list present", "stderr")
-                continue
-
-        return latest_eventid, maxscore_frameid
-
-    def getMaxScoreURL(self, eventid):
-        # Returns url for max score frame in a given event
-
-        return self._server \
-               + "/zm/index.php?view=frame&eid={:d}&fid=0".format(eventid)
+        return res
 
     def getFrameURL(self, frameid):
-        # Returns url for the image specified by the given frameid
-
-        return self._server \
-               + "/zm/index.php?view=image&fid={:d}&eid=&show=capture" \
-                 .format(frameid)
-
-    def getFrameImage(self, frameid, output_filename, max_attempts=5):
-        # Downloads image specified by frameid to the given filename. Returns
-        # True if everything succeeded, or False otherwise. On connection error,
-        # will try max_attempts times, pausing for 1 second in between each try.
-
-        frame_url = self.getFrameURL(frameid)
-
-        attempt = 1
-        while attempt <= max_attempts:
-            response = requests.get(url=frame_url, cookies=self._cookies,
-                                    verify=self._verify_ssl)
-            if response.ok:
-                try:
-                    f = open(output_filename, 'wb')
-                except IOError:
-                    self.debug(1, "Error opening file {:s}"\
-                               .format(output_filename), "stderr")
-                    return False
-                f.write(response.content)
-                if attempt > 1:
-                    self.debug(1, ("Downloaded image {:s} after {:d} attempts."\
-                                   .format(output_filename, attempt)))
-                else:
-                    self.debug(1, "Downloaded image {:s}."\
-                               .format(output_filename))
-                return True
-            else:
-                attempt += 1
-                time.sleep(1)
-
-        self.debug(1, "Connection error in getFrameImage", "stderr")
-        return False
+        '''Returns url for the image specified by the given frameid'''
+        return self.webpath + "?view=image&fid={:d}&eid=&show=capture".format(frameid)
