@@ -1,0 +1,13 @@
+The SSD models use the coco.names.91. YoloV4 uses coco.names.80. These models
+are open source.
+
+YoloV4 download:
+https://github.com/AlexeyAB/darknet/releases/download/yolov4/yolov4.weights
+https://github.com/AlexeyAB/darknet/releases/download/darknet_yolo_v3_optimal/yolov4.cfg
+
+SSD MobileNet V3 and SSD Inception V2 download:
+See: https://github.com/opencv/opencv/wiki/TensorFlow-Object-Detection-API
+http://download.tensorflow.org/models/object_detection/ssd_mobilenet_v3_large_coco_2020_01_14.tar.gz
+https://gist.github.com/dkurt/54a8e8b51beb3bd3f770b79e56927bd7
+http://download.tensorflow.org/models/object_detection/ssd_inception_v2_coco_2017_11_17.tar.gz
+https://github.com/opencv/opencv_extra/blob/master/testdata/dnn/ssd_inception_v2_coco_2017_11_17.pbtxt
