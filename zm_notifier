@@ -1,319 +1,172 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import sys
 import time
-from datetime import datetime, timedelta
-import subprocess
-import ConfigParser
-from copy import copy
+import cv2
 import zm_util
 from zm_api import ZMAPI
+from zm_settings import Settings
+from zm_monitor import Monitor
+import zm_object_detection as Detectors
+from zm_notification import Notification
 
-def notify_new_event(addr, monitor, msg_file, img_file, img_url,
-                     detected_objects=None):
-    # Sends notification email using mutt
-
-    # Format subject and body of message 
-
-    subject = "ZoneMinder alarm"
-
-    obj_string = ""
-    if detected_objects is not None:
-        for obj in detected_objects:
-            for key, value in obj.iteritems():
-                obj_string += "{:s}: {:.0f}%\n".format(key, value*100.)
-        obj_string.rstrip('\n')
-
-    message = "Motion detected by {:s}.\n".format(monitor['name'])
-    message += "Event {:d}\n".format(monitor['last_eventid'])
-    if len(obj_string) > 0:
-        message += obj_string
-    if not addr['mms']:
-        message += img_url
-
-    # Write message file
-
-    try:
-        f = open(msg_file, 'w')
-    except IOError:
-        zm_util.debug("Cannot write to {:s}.\n".format(msg_file), "stderr")
-        return
-    f.write(message)
-    f.close()
-
-    # Send message
-
-    try:
-        stdin_file = open(msg_file)
-    except IOError:
-        zm_util.debug("Cannot open {:s}.\n".format(msg_file), "stderr")
-        return
-    if addr['mms']:
-        subprocess.call(['mutt', '-s', subject, '-a', img_file, "--",
-                        addr["address"]], stdin=stdin_file)
-    else:
-        subprocess.call(['mutt', '-s', subject, addr["address"]],
-                        stdin=stdin_file)
-    stdin_file.close()
 
 if __name__ == "__main__":
+    ################################################################################################
+    # Setup
+    ################################################################################################
 
-    # Read config file
+    # Read config file static sections (all except monitors)
+    st = Settings("/etc/zm_notifier.cfg")
 
-    config = ConfigParser.ConfigParser()
-    config_file = '/etc/zm_notifier.cfg'
-    try:
-        f = open(config_file)
-    except IOError:
-        zm_util.debug("Error opening {:s}".format(config_file), "stderr")
-        sys.exit(1)
-    if len(config.read(config_file)) == 0:
-        zm_util.debug("Error parsing {:s}".format(config_file), "stderr")
-        sys.exit(1)
-
-    for section in ["ZoneMinderAPI", "Email", "Daemon", "Detection"]:
-        if not config.has_section(section):
-            zm_util.debug("No section {:s} found in {:s}".format(section,
-                          config_file), "stderr")
-            sys.exit(1)
-
-    # ZoneMinderAPI settings
-
-    local_server_address = zm_util.get_from_config(config, "ZoneMinderAPI",
-                                                   "local_server_address")
-    world_server_address = zm_util.get_from_config(config, "ZoneMinderAPI",
-                                                   "world_server_address")
-    username = zm_util.get_from_config(config, "ZoneMinderAPI", "username")
-    password = zm_util.get_from_config(config, "ZoneMinderAPI", "password")
-    verify_ssl = zm_util.get_bool_from_config(config, "ZoneMinderAPI",
-                                     "verify_ssl", required=False, default=True)
-
-    # Email settings
-    
-    tmp_message_file = zm_util.get_from_config(config, "Email",
-                           "tmp_message_file", False, "/tmp/zm_event_email.txt")
-    tmp_image_file = zm_util.get_from_config(config, "Email", "tmp_image_file",
-                                             False, "/tmp/zm_event_image.txt")
-    
-    addresses = zm_util.get_from_config(config, "Email", "addresses")
-    attach_image = zm_util.get_from_config(config, "Email", "attach_image")
-    addresses = addresses.replace(" ","")
-    addrs = addresses.split(",")
-    attach_image = attach_image.replace(" ","")
-    imgs = attach_image.split(",")
-    if len(addrs) != len(imgs):
-        zm_util.debug("Must specify attach_image for each address", "stderr")
+    #  Log in to API and get list of all monitors
+    zmapi = ZMAPI(st.local_server_address, st.username, st.password, st.world_server_address,
+                  st.verify_ssl)
+    if not zmapi.login():
+        zm_util.debug("Login to the ZoneMinder API failed." "stderr")
         sys.exit(1)
 
-    naddrs = len(addrs)
-    toaddrs = []
-    any_mms = False
-    for i in range(naddrs):
-        toaddr = {"address": addrs[i]}
-        if (imgs[i] == "Yes") or (imgs[i] == "True"):
-            toaddr["mms"] = True
-            any_mms = True
-        elif (imgs[i] == "No") or (imgs[i] == "False"):
-            toaddr["mms"] = False
-        else:
-            zm_util.debug("attach_image must be Yes/True/No/False", "stderr")
-            sys.exit(1)
-        toaddrs.append(toaddr)
+    # Read monitors settings
+    api_monitors = zmapi.getMonitors()
+    st.readMonitorSettings(api_monitors)
 
-    # Daemon settings
-
-    running_timeout = zm_util.get_int_from_config(config, "Daemon",
-                                   "running_timeout", required=False, default=3)
-    stopped_timeout = zm_util.get_int_from_config(config, "Daemon",
-                                   "stopped_timeout", required=False, default=3)
-    login_refresh = zm_util.get_int_from_config(config, "Daemon",
-                                  "login_refresh", required=False, default=1200)
-
-    # Detection settings
-
-    detect_objects = zm_util.get_bool_from_config(config, "Detection",
-                                 "detect_objects", required=False, default=True)
-    detection_suspend = zm_util.get_int_from_config(config, "Detection",
-                                 "detection_suspend", required=False, default=0)
-    if detect_objects:
-        detect_classes = zm_util.get_from_config(config, "Detection",
-                             "detect_classes", required=False, default="person")
-        detect_classes = detect_classes.replace(" ","")
-        detect_classes = detect_classes.split(",")
-        exclude_monitors = zm_util.get_from_config(config, "Detection",
-                                 "exclude_monitors", required=False, default="")
-        exclude_monitors = exclude_monitors.replace(" ","")
-        exclude_monitors = exclude_monitors.split(",")
-        img_width = zm_util.get_int_from_config(config, "Detection",
-                                       "img_width", required=False, default=416)
-        img_height = zm_util.get_int_from_config(config, "Detection",
-                                      "img_height", required=False, default=416)
-        conf_threshold = zm_util.get_float_from_config(config, "Detection",
-                                 "conf_threshold", required=False, default=0.25)
-        detection_config = zm_util.get_from_config(config, "Detection",
-                                                   "detection_config")
-        detection_weights = zm_util.get_from_config(config, "Detection",
-                                                   "detection_weights")
-        detection_names = zm_util.get_from_config(config, "Detection",
-                                                   "detection_names")
+    # Set up notifiers
+    notifier = Notification(st.tmp_message_file, st.tmp_analysis_image)
 
     # Set up object detection
+    monitors = []
+    for api_mon in api_monitors:
+        # Reference to settings for this monitor
+        mname = api_mon["name"]
+        mid = api_mon["id"]
+        ms = st.monitors[mname]
 
-    if detect_objects:
-        from zm_object_detection import Detector
-        detector = Detector(img_width, img_height, conf_threshold)
+        # Set up the object detector for this monitor
+        if ms["detect_objects"]:
+            if ms["detection_model"] == "Darknet":
+                classes_path = st.darknet_classes
+                detector = Detectors.DetectorDarknet(mname, st.darknet_config, st.darknet_model,
+                           ms["detect_classes"], ms["confidence_threshold"],
+                           analysis_size=st.darknet_analysis_size)
+            elif ms["detection_model"] == "MobileNetV3":
+                classes_path = st.mobilenet_classes
+                detector = Detectors.DetectorSSDMobileNetV3(mname, st.mobilenet_config,
+                           st.mobilenet_model, ms["detect_classes"], ms["confidence_threshold"])
+            elif ms["detection_model"] == "InceptionV2":
+                classes_path = st.inception_classes
+                detector = Detectors.DetectorTensorFlow(mname, st.inception_config,
+                           st.inception_model, ms["detect_classes"], ms["confidence_threshold"],
+                           analysis_size=st.inception_analysis_size)
+            elif ms["detection_model"] == "HOG":
+                classes_path = ""
+                detector = Detectors.DetectorHOG(mname, st.hog_analysis_size, st.hog_winstride,
+                           st.hog_scale)
+            else:
+                zm_util.debug("{:s} is not a valid detection model.".format(ms["detection_model"]),
+                              "stderr")
+                zmapi.logout()
+                sys.exit(1)
+            check = detector.initializeNetwork()
+            check1 = detector.readClasses(classes_path)
+            if not check or not check1:
+                zm_util.debug("There was an error setting up detector for {:s}.".format(mname),
+                              "stderr")
+                sys.exit(1)
 
-        if not detector.setup(detection_config, detection_weights,
-                              detection_names):
-            sys.exit(1)
+        # Append the monitor to the list
+        monitors.append(Monitor(mname, mid, zmapi, detector, ms["detect_objects"], ms["detect_in"]))
 
-    # Login and store last login time
-
-    zm = ZMAPI(local_server_address, username, password, verify_ssl)
-    if not zm.login():
-        sys.exit(1)
-    last_login_time = datetime.now()
-    last_detection_time = datetime.now()
-    zm_util.debug("Successful login")
-
-    rebuild_monitors = True
+    ################################################################################################
+    # Main loop
+    ################################################################################################
     last_status = "Not running"
-    while 1:
-
+    while True:
         sys.stdout.flush()
         sys.stderr.flush()
 
-        # Login again if necessary to keep session active
-
-        current_time = datetime.now()
-        if current_time - last_login_time > timedelta(seconds=login_refresh):
-            if not zm.login():
-                sys.exit(1)
-            last_login_time = datetime.now()
-
-        # Check if ZoneMinder is running
-
-        if zm.getDaemonStatus():
-
-            if last_status == "Not running":
-                zm_util.debug("ZoneMinder is now running.")
-                last_status = "Running"
-
-                # Pause to ensure monitors are up by the time we query them
-
-                time.sleep(stopped_timeout)
-
-            # Get list of monitors
-
-            if rebuild_monitors:
-                rebuild_monitors = False
-                monitors = zm.getMonitors(active_only=True)
-
-                # Get last event information for each monitor
-
-                for monitor in monitors:
-                    monitor['last_eventid'], monitor['maxscore_frameid'] = \
-                        zm.getMonitorLatestEvent(monitor['id'])
-                    monitor['detection'] = detect_objects
-
-                # Determine if we are doing object detection on each monitor
-
-                if detect_objects:
-                    for name in exclude_monitors:
-                        name_found = False
-                        for monitor in monitors:
-                            if name == monitor['name']:
-                                monitor['detection'] = False
-                                name_found = True
-                                break
-                        if name_found:
-                            zm_util.debug("Not doing object detection on " +
-                                          "monitor {:s}".format(name))
-                        else:
-                            zm_util.debug("Warning: no active monitor named " +
-                                          "{:s}".format(name))
-
-            # Check for dropped out monitors
-
-            for monitor in monitors:
-                if not zm.getMonitorDaemonStatus(monitor['id']):
-                    zm_util.debug("Warning: monitor {:s} has dropped out"\
-                                  .format(monitor['name'], "stderr"))
-                    rebuild_monitors = True
-                    continue
-
-                # Check for new event and send alert
-
-                last_eventid, maxscore_frameid = \
-                    zm.getMonitorLatestEvent(monitor['id'])
-                if last_eventid == 0:
-                    continue
-                if last_eventid != monitor['last_eventid']:
-                    monitor['last_eventid'] = last_eventid
-                    monitor['maxscore_frameid'] = maxscore_frameid
-                    img_url = zm.getFrameURL(monitor['maxscore_frameid'])
-                    img_url = img_url.replace(local_server_address,
-                                              world_server_address)
-
-                    hasimg = True
-                    if any_mms or monitor['detection']:
-                        hasimg = zm.getFrameImage(monitor['maxscore_frameid'],
-                                                  tmp_image_file)
-
-                    current_time = datetime.now()
-                    detection_suspended = current_time - last_detection_time \
-                                        < timedelta(seconds=detection_suspend)
-
-                    # Do object detection
-
-                    matches = None
-                    if monitor['detection'] and not detection_suspended \
-                                            and hasimg:
-                        if detector.detect(tmp_image_file, detect_classes):
-                            matches = detector.matches()
-                            nmatches = len(matches)
-                            if nmatches == 0:
-                                msg = "No requested classes detected for "\
-                                    + "event {:d}\nProcessing time: {:.2f}"\
-                                    .format(last_eventid,
-                                            detector.detectionTime())
-                                zm_util.debug(msg)
-                                continue    # Don't send alert
-                            else:
-                                detected_list = ""
-                                for match in matches:
-                                    for key in match:
-                                        detected_list += key + ", "
-                                detected_list = detected_list.rstrip(", ")
-                                msg = "Detected " + detected_list + " in "\
-                                    + "{:.2f} seconds"\
-                                    .format(detector.detectionTime())
-                                zm_util.debug(msg)
-                                last_detection_time = datetime.now()
-
-                    zm_util.debug("Sending event alerts for event {:d}"\
-                          .format(last_eventid))
-                    for addr in toaddrs:
-                        # If image failed to download, just send the link
-                        useaddr = copy(addr)
-                        useaddr['mms'] = useaddr['mms'] and hasimg
-                        notify_new_event(useaddr, monitor, tmp_message_file,
-                                         tmp_image_file, img_url, matches)
-
-            # Wait longer for new monitors to possibly come online
-
-            if rebuild_monitors:
-                time.sleep(stopped_timeout)
-            else:
-                time.sleep(running_timeout)
-
-        else:
-
+        # If ZoneMinder is not running, pause and start over
+        if not zmapi.getDaemonStatus():
             if last_status == "Running":
                 zm_util.debug("ZoneMinder is no longer running.")
                 last_status = "Not running"
+            time.sleep(st.stopped_timeout)
+            continue
 
-            rebuild_monitors = True
-            time.sleep(stopped_timeout)
+        # Update status if needed
+        if last_status == "Not running":
+            zm_util.debug("ZoneMinder is now running.")
+            last_status = "Running"
 
-    zm.logout()
+            # Pause to ensure the monitors' active statuses are set by the time we query
+            time.sleep(5)
+
+            # Update the active status and last event for all monitors
+            for monitor in monitors:
+                monitor.checkActive()
+                monitor.getNewEvent()
+
+        # Loop through all monitors to check for new events
+        for monitor in monitors:
+            if monitor.active:
+                # A monitor may have dropped out since the last time we checked
+                if not monitor.checkActive():
+                    zm_util.debug("Warning: monitor {:s} has dropped out.".format(monitor.name),
+                                  "stderr")
+                    continue
+
+                # Check for new event
+                if monitor.getNewEvent():
+                    # Do object detection and get max score frame and detection info. If this
+                    # monitor is not set to do detection, this method just returns the max score
+                    # frame and some empty detection info.
+                    frame, objclass, confidence = monitor.detectObjects()
+
+                    # Set some data for the message
+                    eventid = monitor.latest_event['id']
+                    event_url = zmapi.getEventURL(eventid)
+                    msg_head = "Motion detected, {:s}, event {:d}.".format(monitor.name, eventid)
+                    zm_util.debug(msg_head)
+                    msg_head += "\n" + event_url
+                    msg_detect ="Detected {:s}, confidence {:.2f}"
+
+                    if frame is not None:
+                        # Scale and save the image to send in the notification
+                        frame = cv2.resize(frame, st.analysis_image_size)
+                        cv2.imwrite(st.tmp_analysis_image, frame)
+
+                        # Send notifications. Possible situations:
+                        # 1) detection on and object detected -> send message
+                        # 2) detection on and no object detected ->
+                        #    a) If notify_no_object, send anyway
+                        #    b) Otherwise, ignore this event
+                        # 3) detection off -> send notification
+                        if monitor.detect_objects:
+                            # Send notifications if we detected something
+                            if objclass != "":
+                                msg_detect = msg_detect.format(objclass, confidence)
+                                zm_util.debug(msg_detect)
+                                msg = msg_head + "\n" + msg_detect
+                                notifier.sendNotifications(st.to_addresses, msg)
+                            else:
+                                zm_util.debug("No objects detected in event {:d}.".format(eventid))
+                                # Send notifications even with no detections if requested
+                                if st.notify_no_object:
+                                    notifier.sendNotifications(st.to_addresses, msg_head)
+
+                        # Send notifications if object detection is off
+                        else:
+                            notifier.sendNotifications(st.to_addresses, msg_head)
+                    else:
+                        zm_util.debug("No image. Skipping event {:d}.\n".format(eventid), "stderr")
+
+            else:
+                # Check if previously inactive monitor has become active
+                monitor.checkActive()
+
+        # Wait for the next cycle
+        time.sleep(st.running_timeout)
+
+    ################################################################################################
+    # Cleanup. We'll never get here, but we'll leave it in case a graceful stop feature is added.
+    ################################################################################################
+    zmapi.logout()

@@ -10,14 +10,18 @@ import zm_util
 #urllib3.disable_warnings()
 
 class ZMAPI:
-    def __init__(self, server, username, password, verify_ssl=True, debug_level=1):
+    def __init__(self, localserver, username, password, webserver=None, verify_ssl=True,
+                 debug_level=1):
         self.username = username
         self.password = password
         self.verify = verify_ssl
         self.debug_level = debug_level
 
-        self.apipath = server + '/zm/api'
-        self.webpath = server + '/zm/index.php'
+        self.apipath = localserver + '/zm/api'
+        if webserver is None:
+            self.webpath = localserver + '/zm/index.php'
+        else:
+            self.webpath = webserver + '/zm/index.php'
         self.access_init = None
         self.refresh_init = None
 
@@ -51,16 +55,21 @@ class ZMAPI:
                 check = self.login(method='refresh_token')
         return check
 
-    def _makeRequest(self, url, params=[]):
+    def _makeRequest(self, url, params=[], method="get", post_data=None):
         '''Makes a request to the API, appending access token, and returns response.
            params is a list of options to be appended at the end of the url (other
-           than the access token)'''
+           than the access token). Automatically refreshes tokens if required.
+           method: 'get' or 'post'
+           post_data: optional dict of data to go along with a post request'''
 
         self._refreshTokens()
         access_url = url + '?token={:s}'.format(self.access_token)
         for item in params:
             access_url += '&' + item
-        return requests.get(access_url, verify=self.verify)
+        if method == 'get':
+            return requests.get(access_url, verify=self.verify)
+        elif method == 'post':
+            return requests.post(access_url, data=post_data, verify=self.verify)
 
     def debug(self, level, message, pipename='stdout'):
         if level >= self.debug_level:
@@ -158,12 +167,14 @@ class ZMAPI:
 
         return monitors
 
-    def getMonitorLatestEvent(self, monitorID):
+    def getMonitorLatestEvent(self, monitorID, idx=0):
         '''Returns pertinent information about the latest event for a monitor.
-           res['id']: eventid (0 by default or on error)
+           res['id']: eventid (-1 by default or on error)
            res['maxscore_frameid']: frameid of maxscore (0 by default)
            res['path']: filesystem path of the event on the server ("" by default)
            res['video_name']: file name of the video ("" by default)
+           The input idx is optional and defaults to 0, which means it returns the latest event
+           available. Increase the index to return an earlier event.
 
            Note: normally when searching events, you'd need to get the number of pages as follows:
                monitor_url = self.apipath + '/events/index/MonitorId:{:d}.json'\
@@ -177,7 +188,7 @@ class ZMAPI:
            documentation. However, due to the way the API sorts events, the first result on the
            first page will be the latest event for the monitor.'''
 
-        res = {'id':0, 'maxscore_frameid':0, 'path':"", 'video_name':""}
+        res = {'id':-1, 'maxscore_frameid':0, 'path':"", 'video_name':""}
 
         # Get the list of events for this monitor in descending order based on EndTime
         monitor_url = self.apipath + '/events/index/MonitorId:{:d}.json'.format(monitorID)
@@ -190,7 +201,7 @@ class ZMAPI:
         # Since the list is already sorted, the first in the list will be the latest one
         events = rj['events']
         if len(events) > 0:
-            event = events[0]
+            event = events[idx]
             ID = int(event['Event']['Id'])
             res['id'] = ID
             res['maxscore_frameid'] = int(event['Event']['MaxScoreFrameId'])
@@ -199,6 +210,38 @@ class ZMAPI:
 
         return res
 
-    def getFrameURL(self, frameid):
-        '''Returns url for the image specified by the given frameid'''
-        return self.webpath + "?view=image&fid={:d}&eid=&show=capture".format(frameid)
+    def getEventURL(self, eventid):
+        '''Returns url for the event specified by the given eventid'''
+        return self.webpath + "?view=event&eid={:d}".format(eventid)
+
+    def getRunStates(self):
+        '''Returns a list of run states. Each item in the list is a dict with the form:
+           item['id']: Id of the run state in the DB
+           item['name']: run state name
+           item['active']: True/False: whether this is the active run state. Note that just
+                           because a run state is listed as active doesn't mean ZM is running.
+                           It could just be the last one that ran. Use getDaemonStatus to
+                           determine if it is running.
+           List will be empty if there is an error.'''
+
+        runstates = []
+        stateurl = self.apipath + "/states.json"
+        r = self._makeRequest(stateurl)
+        if not r.ok:
+            self.debug(1, "Error getting run states", "stderr")
+            return runstates
+        rj = r.json()
+        states = rj['states']
+        for state in states:
+            statedict = state['State']
+            runstates.append({'id': statedict['Id'],
+                              'name': statedict['Name'],
+                              'active': statedict['IsActive']==1})
+        return runstates
+
+    def changeRunState(self, runstate_name):
+        '''Changes run state. Returns True on success or False on error.'''
+
+        stateurl = self.apipath + "/states/change/{:s}.json".format(runstate_name)
+        r = self._makeRequest(stateurl, method="post")
+        return r.ok

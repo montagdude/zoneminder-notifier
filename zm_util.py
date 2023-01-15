@@ -1,6 +1,6 @@
 import sys
 from datetime import datetime
-from configparser import ConfigParser
+from configparser import NoOptionError
 
 def debug(message, pipe="stdout"):
 
@@ -14,7 +14,7 @@ def get_from_config(config, section, option, required=True, default=None):
 
     try:
         val = config.get(section, option)
-    except ConfigParser.NoOptionError:
+    except NoOptionError:
         if required:
             debug("{:s}:{:s} is required".format(section, option), "stderr")
             sys.exit(1)
@@ -27,7 +27,7 @@ def get_bool_from_config(config, section, option, required=True, default=None):
 
     try:
         val = config.getboolean(section, option)
-    except ConfigParser.NoOptionError:
+    except NoOptionError:
         if required:
             debug("{:s}:{:s} is required".format(section, option), "stderr")
             sys.exit(1)
@@ -44,7 +44,7 @@ def get_int_from_config(config, section, option, required=True, default=None):
 
     try:
         val = config.getint(section, option)
-    except ConfigParser.NoOptionError:
+    except NoOptionError:
         if required:
             debug("{:s}:{:s} is required".format(section, option), "stderr")
             sys.exit(1)
@@ -61,7 +61,7 @@ def get_float_from_config(config, section, option, required=True, default=None):
 
     try:
         val = config.getfloat(section, option)
-    except ConfigParser.NoOptionError:
+    except NoOptionError:
         if required:
             debug("{:s}:{:s} is required".format(section, option), "stderr")
             sys.exit(1)
