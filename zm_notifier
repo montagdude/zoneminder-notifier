@@ -13,7 +13,8 @@ from zm_notification import Notification
 
 if __name__ == "__main__":
     ################################################################################################
-    # Setup ################################################################################################
+    # Setup
+    ################################################################################################
 
     # Read config file static sections (all except monitors)
     st = Settings("/etc/zm_notifier.cfg")
@@ -106,61 +107,63 @@ if __name__ == "__main__":
 
         # Loop through all monitors to check for new events
         for monitor in monitors:
-            if monitor.active:
-                # A monitor may have dropped out since the last time we checked
-                if not monitor.checkActive():
-                    zm_util.debug("Warning: monitor {:s} has dropped out.".format(monitor.name),
-                                  "stderr")
-                    continue
-
-                # Check for new event
-                if monitor.getNewEvent():
-                    # Do object detection and get max score frame and detection info. If this
-                    # monitor is not set to do detection, this method just returns the max score
-                    # frame and some empty detection info.
-                    frame, objclass, confidence = monitor.detectObjects()
-
-                    # Set some data for the message
-                    eventid = monitor.latest_event['id']
-                    event_url = zmapi.getEventURL(eventid)
-                    msg_head = "Motion detected, {:s}, event {:d}.".format(monitor.name, eventid)
-                    zm_util.debug(msg_head)
-                    msg_head += "\n" + event_url
-                    msg_detect ="Detected {:s}, confidence {:.2f}"
-
-                    if frame is not None:
-                        # Scale and save the image to send in the notification
-                        frame = cv2.resize(frame, st.analysis_image_size)
-                        cv2.imwrite(st.tmp_analysis_image, frame)
-
-                        # Send notifications. Possible situations:
-                        # 1) detection on and object detected -> send message
-                        # 2) detection on and no object detected ->
-                        #    a) If notify_no_object, send anyway
-                        #    b) Otherwise, ignore this event
-                        # 3) detection off -> send notification
-                        if monitor.detect_objects:
-                            # Send notifications if we detected something
-                            if objclass != "":
-                                msg_detect = msg_detect.format(objclass, confidence)
-                                zm_util.debug(msg_detect)
-                                msg = msg_head + "\n" + msg_detect
-                                notifier.sendNotifications(st.to_addresses, msg)
-                            else:
-                                zm_util.debug("No objects detected in event {:d}.".format(eventid))
-                                # Send notifications even with no detections if requested
-                                if st.notify_no_object:
-                                    notifier.sendNotifications(st.to_addresses, msg_head)
-
-                        # Send notifications if object detection is off
-                        else:
-                            notifier.sendNotifications(st.to_addresses, msg_head)
-                    else:
-                        zm_util.debug("No image. Skipping event {:d}.\n".format(eventid), "stderr")
-
-            else:
-                # Check if previously inactive monitor has become active
+            if not monitor.active:
+                # Check if previously inactive monitor has become active, then continue to the next
+                # monitor.
                 monitor.checkActive()
+                continue
+
+            # A monitor may have dropped out since the last time we checked
+            if not monitor.checkActive():
+                zm_util.debug("Warning: monitor {:s} has dropped out.".format(monitor.name),
+                              "stderr")
+                continue
+
+            # Check for new event
+            if monitor.getNewEvent():
+                # Do object detection and get max score frame and detection info. If this monitor
+                # is not set to do detection, this method just returns the max score frame and some
+                # empty detection info.
+                frame, objclass, confidence = monitor.detectObjects()
+
+                # Set some data for the message
+                eventid = monitor.latest_event['id']
+                event_url = zmapi.getEventURL(eventid)
+                msg_head = "Motion detected, {:s}, event {:d}.".format(monitor.name, eventid)
+                zm_util.debug(msg_head)
+                msg_head += "\n" + event_url
+                msg_detect ="Detected {:s}, confidence {:.2f}"
+
+                if frame is not None:
+                    # Scale and save the image to send in the notification
+                    frame = cv2.resize(frame, st.analysis_image_size)
+                    cv2.imwrite(st.tmp_analysis_image, frame)
+
+                    # Send notifications. Possible situations:
+                    # 1) detection on and object detected -> send message
+                    # 2) detection on and no object detected ->
+                    #    a) If notify_no_object, send anyway
+                    #    b) Otherwise, ignore this event
+                    # 3) detection off -> send notification
+                    if monitor.detect_objects:
+                        # Send notifications if we detected something
+                        if objclass != "":
+                            msg_detect = msg_detect.format(objclass, confidence)
+                            zm_util.debug(msg_detect)
+                            msg = msg_head + "\n" + msg_detect
+                            notifier.sendNotifications(msg, st.to_addresses, st.pushover_data)
+                        else:
+                            zm_util.debug("No objects detected in event {:d}.".format(eventid))
+                            # Send notifications even with no detections if requested
+                            if st.notify_no_object:
+                                notifier.sendNotifications(msg_head, st.to_addresses,
+                                                           st.pushover_data)
+
+                    # Send notifications if object detection is off
+                    else:
+                        notifier.sendNotifications(msg_head, st.to_addresses, st.pushover_data)
+                else:
+                    zm_util.debug("No image. Skipping event {:d}.\n".format(eventid), "stderr")
 
         # Wait for the next cycle
         time.sleep(st.running_timeout)

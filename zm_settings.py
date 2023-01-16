@@ -46,14 +46,21 @@ class Settings:
         w = zm_util.get_int_from_config(config, section, "analysis_image_width")
         h = zm_util.get_int_from_config(config, section, "analysis_image_height")
         self.analysis_image_size = (w,h)
-        addresses = zm_util.get_from_config(config, section, "addresses").replace(" ","").split(",")
-        attach_image = zm_util.get_from_config(config, section, "attach_image") \
-                       .replace(" ","").split(",")
-        if len(addresses) != len(attach_image):
-            zm_util.debug("Must specify attach_image for each address", "stderr")
-            sys.exit(1)
+        addresses = zm_util.get_from_config(config, section, "addresses", required=False,
+                                            default="")
         self.notify_no_object = zm_util.get_bool_from_config(config, section, "notify_no_object",
                                                              required=False, default=False)
+
+        # Convert email addresses and attachment settings to lists
+        if addresses != "":
+            addresses = addresses.replace(" ","").split(",")
+            attach_image = zm_util.get_from_config(config, section, "attach_image") \
+                           .replace(" ","").split(",")
+            if len(addresses) != len(attach_image):
+                zm_util.debug("Must specify attach_image for each address", "stderr")
+                sys.exit(1)
+        else:
+            addresses = []
 
         # Get email settings in a more convenient form
         self.to_addresses = []
@@ -69,6 +76,18 @@ class Settings:
                 zm_util.debug("attach_image must be Yes/No", "stderr")
                 sys.exit(1)
             self.to_addresses.append(to_address)
+
+        # Pushover API notification settings
+        self.pushover_data = None
+        use_pushover_api = zm_util.get_bool_from_config(config, section, "use_pushover_api",
+                                                        required=False, default=False)
+        if use_pushover_api:
+            pushover_api_token = zm_util.get_from_config(config, section, "pushover_api_token")
+            pushover_user_key = zm_util.get_from_config(config, section, "pushover_user_key")
+            pushover_attach_image = zm_util.get_bool_from_config(config, section,
+                                              "pushover_attach_image", required=False, default=True)
+            self.pushover_data = {"api_token": pushover_api_token, "user_key": pushover_user_key,
+                                  "attach_image": pushover_attach_image}
 
         # Daemon settings
         section = "Daemon"
