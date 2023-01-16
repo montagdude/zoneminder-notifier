@@ -77,3 +77,8 @@ videos when many events are happening. To save computations, zoneminder-notifier
 will stop analyzing a video as soon as it has made a successful detection, but
 this doesn't help for events where none of the requested object classes are
 found.
+
+![alt tag](https://raw.githubusercontent.com/montagdude/zoneminder-notifier/master/sample_images/analysis_image-1.jpg)
+![alt tag](https://raw.githubusercontent.com/montagdude/zoneminder-notifier/master/sample_images/analysis_image-2.jpg)
+![alt tag](https://raw.githubusercontent.com/montagdude/zoneminder-notifier/master/sample_images/analysis_image-5.jpg)
+![alt tag](https://raw.githubusercontent.com/montagdude/zoneminder-notifier/master/sample_images/analysis_image-7.jpg)
