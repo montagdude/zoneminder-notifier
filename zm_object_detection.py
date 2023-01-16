@@ -6,7 +6,7 @@ import time
 from matplotlib import cm
 from copy import copy
 
-cmap = cm.get_cmap('Spectral')
+cmap = cm.get_cmap('RdYlGn')
 
 class DetectorBase:
     '''Base class for object detection with OpenCV'''
@@ -29,6 +29,7 @@ class DetectorBase:
         self.conf_threshold = confidence_threshold
         self.nms_threshold = nms_threshold
         self.model_name = "Base"
+        self.swapRB = False
 
         # Annotation settings
         self.name_fc = (255,255,255)
@@ -122,7 +123,12 @@ class DetectorBase:
             left = box[0]
             top = box[1]
             classLabel = self.classes[classID]
-            color = self.classesColor[self.identifyClassIDs.index(classID)]
+            tmpcolor = self.classesColor[self.identifyClassIDs.index(classID),:]
+            # Swap red and blue if needed
+            if self.swapRB:
+                color = (tmpcolor[2], tmpcolor[1], tmpcolor[0])
+            else:
+                color = (tmpcolor[0], tmpcolor[1], tmpcolor[2])
             cv2.rectangle(annotated_frame, box, color, thickness=2)
             displayText = "{}: {:.2f}".format(classLabel, confidence)
             cv2.putText(annotated_frame, displayText, (left, top-10), cv2.FONT_HERSHEY_PLAIN,
@@ -260,6 +266,7 @@ class DetectorDarknet(DetectorBase):
         DetectorBase.__init__(self, name, config_path, model_path, identify_classes,
                               confidence_threshold, nms_threshold)
         self.model_name = "Darknet"
+        self.swapRB = True
 
         # Options for analysis_size are: (320,320), (416,416), (608,608)
         if analysis_size not in [(320,320), (416,416), (608,608)]:
@@ -282,7 +289,7 @@ class DetectorDarknet(DetectorBase):
         return True
 
     def detectObjects(self, frame):
-        blob = cv2.dnn.blobFromImage(frame, 1/255., size=self.analysis_size, swapRB=True,
+        blob = cv2.dnn.blobFromImage(frame, 1/255., size=self.analysis_size, swapRB=self.swapRB,
                                      crop=False)
         self.net.setInput(blob)
         cvOut = self.net.forward(self.ln)
@@ -318,6 +325,7 @@ class DetectorSSDMobileNetV3(DetectorBase):
         DetectorBase.__init__(self, name, config_path, model_path, identify_classes,
                               confidence_threshold, nms_threshold)
         self.model_name = "MobileNetV3"
+        self.swapRB = True
 
     def initializeNetwork(self):
         # Check that the paths exist
@@ -331,7 +339,7 @@ class DetectorSSDMobileNetV3(DetectorBase):
         self.net.setInputSize(320,320)
         self.net.setInputScale(1./127.5)
         self.net.setInputMean((127.5, 127.5, 127.5))
-        self.net.setInputSwapRB(True)
+        self.net.setInputSwapRB(self.swapRB)
 
         return True
 
@@ -362,6 +370,7 @@ class DetectorTensorFlow(DetectorBase):
         DetectorBase.__init__(self, name, config_path, model_path, identify_classes,
                               confidence_threshold, nms_threshold)
         self.model_name = "TensorFlow"
+        self.swapRB = True
 
         # Set analysis size
         self.analysis_size = analysis_size
@@ -380,7 +389,7 @@ class DetectorTensorFlow(DetectorBase):
 
     def detectObjects(self, frame):
         # Detect objects
-        blob = cv2.dnn.blobFromImage(frame, size=self.analysis_size, swapRB=True, crop=False)
+        blob = cv2.dnn.blobFromImage(frame, size=self.analysis_size, swapRB=self.swapRB, crop=False)
         self.net.setInput(blob)
         cvOut = self.net.forward()
 
@@ -411,6 +420,7 @@ class DetectorHOG(DetectorBase):
         # Initialize parent class
         DetectorBase.__init__(self, name, "", "", ["person"], 0.0, 0.0)
         self.model_name = "HOG"
+        self.swapRB = False
 
         # Set other parameters
         self.analysis_size = analysis_size

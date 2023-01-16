@@ -13,8 +13,7 @@ from zm_notification import Notification
 
 if __name__ == "__main__":
     ################################################################################################
-    # Setup
-    ################################################################################################
+    # Setup ################################################################################################
 
     # Read config file static sections (all except monitors)
     st = Settings("/etc/zm_notifier.cfg")
@@ -23,7 +22,7 @@ if __name__ == "__main__":
     zmapi = ZMAPI(st.local_server_address, st.username, st.password, st.world_server_address,
                   st.verify_ssl)
     if not zmapi.login():
-        zm_util.debug("Login to the ZoneMinder API failed." "stderr")
+        zm_util.debug("Login to the ZoneMinder API failed.", "stderr")
         sys.exit(1)
 
     # Read monitors settings

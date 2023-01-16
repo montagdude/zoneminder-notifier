@@ -204,9 +204,15 @@ class ZMAPI:
             event = events[idx]
             ID = int(event['Event']['Id'])
             res['id'] = ID
-            res['maxscore_frameid'] = int(event['Event']['MaxScoreFrameId'])
-            res['path'] = event['Event']['FileSystemPath']
-            res['video_name'] = event['Event']['DefaultVideo']
+            # This can be None if ZoneMinder stopped while the event was in progress
+            maxscoreid = event['Event']['MaxScoreFrameId']
+            if maxscoreid is not None:
+                res['maxscore_frameid'] = int(maxscoreid)
+                res['path'] = event['Event']['FileSystemPath']
+                res['video_name'] = event['Event']['DefaultVideo']
+            else:
+                # Return the next event instead
+                return self.getMonitorLatestEvent(monitorID, idx+1)
 
         return res
 
