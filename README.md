@@ -15,17 +15,22 @@ Requirements
 * ZoneMinder with API version 2.0 enabled (tested with ZoneMinder 1.36.32)
 * Python 3 (tested with version 3.10.6)
 * Python modules: setuptools, requests, cv2, numpy, matplotlib
-* Mutt (for notifications by email)
+* Mutt (if you wish to send notifications via email)
+* Pushover account and api token (if you wish to send notifications via Pushover
+  API)
 
 Installation
 ================================================================================
 An install script is provided. It is intended to be run as root or with sudo. It
 will install Python modules in a system Python site-packges directory, the
 config file in /etc, executables in /usr/bin, and object detection model data in
-/usr/share/zm-notifier. The install script also automatically installs, enables,
-and starts the systemd zm_notifier service. If your distro does not use systemd,
-you should comment out those lines in the install script and consult your
-distro's documentation for how to run the daemon automatically at startup.
+/usr/share/zm-notifier. Most of this data is not tracked in the git repository
+due to size but is provided in the release tarballs.
+
+The install script also automatically installs, enables, and starts the systemd
+zm_notifier service. If your distro does not use systemd, you should comment out
+those lines in the install script and consult your distro's documentation for
+how to run the daemon automatically at startup.
 
 Usage
 ================================================================================
@@ -77,6 +82,9 @@ videos when many events are happening. To save computations, zoneminder-notifier
 will stop analyzing a video as soon as it has made a successful detection, but
 this doesn't help for events where none of the requested object classes are
 found.
+
+The images below represent the result of Darknet object detection with the
+classes "person, chair, sofa, bicycle" from some of my ZoneMinder events.
 
 ![alt tag](https://raw.githubusercontent.com/montagdude/zoneminder-notifier/master/sample_images/analysis_image-1.jpg)
 ![alt tag](https://raw.githubusercontent.com/montagdude/zoneminder-notifier/master/sample_images/analysis_image-2.jpg)
