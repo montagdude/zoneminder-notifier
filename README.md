@@ -69,8 +69,8 @@ All except Histograms of Oriented Gradients (HOG) are trained on the COCO
 datasets and are suitable for detecting a wide variety of object classes (HOG
 detects people only). For each monitor, the classes you want it to actually
 pay attention to should be specified in a comma-separated list. It is possible
-to do object detection on either the max score frame from each new ZoneMinder,
-or the entire video. The former is much faster and generally recommended.
+to do object detection on either the max score frame from each new ZoneMinder
+event or the entire video. The former is much faster and generally recommended.
 Darknet is the most reliable model but also the slowest, but it offers an
 excellent combination of speed and accuracy when detecting in the max score
 frame only.
