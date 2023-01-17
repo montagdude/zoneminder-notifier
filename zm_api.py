@@ -2,7 +2,6 @@
 
 import requests
 import time
-import datetime
 import zm_util
 # If you have a webserver serving HTTPS with a self-signed certificate, you
 # may want to uncomment the line below.
