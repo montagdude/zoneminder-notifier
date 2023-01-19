@@ -61,14 +61,31 @@ class ZMAPI:
            method: 'get' or 'post'
            post_data: optional dict of data to go along with a post request'''
 
-        self._refreshTokens()
+        # Initialize r as bad request so calling method can catch it on error
+        r = requests.Response()
+        r.status_code = 400
+
+        # Refresh tokens if needed
+        if not self._refreshTokens():
+            return r
+
+        # Put together the url
         access_url = url + '?token={:s}'.format(self.access_token)
         for item in params:
             access_url += '&' + item
+
+        # Make the request and return the response
         if method == 'get':
-            return requests.get(access_url, verify=self.verify)
+            try:
+                r = requests.get(access_url, verify=self.verify)
+            except requests.exceptions.ConnectionError:
+                self.debug(1, "Get request failed due to connection error.", "stderr")
         elif method == 'post':
-            return requests.post(access_url, data=post_data, verify=self.verify)
+            try:
+                r = requests.post(access_url, data=post_data, verify=self.verify)
+            except requests.exceptions.ConnectionError:
+                self.debug(1, "Post request failed due to connection error.", "stderr")
+        return r
 
     def debug(self, level, message, pipename='stdout'):
         if level >= self.debug_level:
@@ -83,22 +100,25 @@ class ZMAPI:
             login_data = {'user': self.username, 'pass': self.password}
         else:
             login_data = {'token': self.refresh_token}
-        r = requests.post(url=login_url, data=login_data, verify=self.verify)
-        if r.ok:
-            rj = r.json()
-            self.access_token = rj['access_token']
-            self.access_timeout = float(rj['access_token_expires']) + time.time()
-            self.refresh_token = rj['refresh_token']
-            self.refresh_token_timeout = float(rj['refresh_token_expires']) + time.time()
-            api_version = rj['apiversion']
-            if api_version != '2.0':
-                self.debug(1, "API version 2.0 required.", "stderr")
+        try:
+            r = requests.post(url=login_url, data=login_data, verify=self.verify)
+            if r.ok:
+                rj = r.json()
+                self.access_token = rj['access_token']
+                self.access_timeout = float(rj['access_token_expires']) + time.time()
+                self.refresh_token = rj['refresh_token']
+                self.refresh_token_timeout = float(rj['refresh_token_expires']) + time.time()
+                api_version = rj['apiversion']
+                if api_version != '2.0':
+                    self.debug(1, "API version 2.0 required.", "stderr")
+                    return False
+                access_init = time.time()
+                refresh_init = time.time()
+            else:
+                self.debug(1, "Login failed with status {:d}.".format(r.status_code), "stderr")
                 return False
-            access_init = time.time()
-            refresh_init = time.time()
-        else:
-            self.debug(1, "Login failed with status {:d}.".format(r.status_code), "stderr")
-            return False
+        except requests.exceptions.ConnectionError:
+            self.debug(1, "Login failed due to connection error.", "stderr")
 
         return True
 
