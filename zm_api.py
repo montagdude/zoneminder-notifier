@@ -119,6 +119,7 @@ class ZMAPI:
                 return False
         except requests.exceptions.ConnectionError:
             self.debug(1, "Login failed due to connection error.", "stderr")
+            return False
 
         return True
 
