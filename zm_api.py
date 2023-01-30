@@ -3,6 +3,7 @@
 import requests
 import time
 import zm_util
+from json.decoder import JSONDecodeError
 # If you have a webserver serving HTTPS with a self-signed certificate, you
 # may want to uncomment the line below.
 #import urllib3
@@ -21,8 +22,6 @@ class ZMAPI:
             self.webpath = localserver + '/zm/index.php'
         else:
             self.webpath = webserver + '/zm/index.php'
-        self.access_init = None
-        self.refresh_init = None
 
         self.access_token = None
         self.access_timeout = 0
@@ -103,7 +102,11 @@ class ZMAPI:
         try:
             r = requests.post(url=login_url, data=login_data, verify=self.verify)
             if r.ok:
-                rj = r.json()
+                try:
+                    rj = r.json()
+                except JSONDecodeError:
+                    self.debug(1, "Login failed due to error decoding response.", "stderr")
+                    return False
                 self.access_token = rj['access_token']
                 self.access_timeout = float(rj['access_token_expires']) + time.time()
                 self.refresh_token = rj['refresh_token']
@@ -112,8 +115,6 @@ class ZMAPI:
                 if api_version != '2.0':
                     self.debug(1, "API version 2.0 required.", "stderr")
                     return False
-                access_init = time.time()
-                refresh_init = time.time()
             else:
                 self.debug(1, "Login failed with status {:d}.".format(r.status_code), "stderr")
                 return False
