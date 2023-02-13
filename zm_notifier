@@ -11,6 +11,21 @@ import zm_object_detection as Detectors
 from zm_notification import Notification
 
 
+def resize_image(frame, dim, preserve_aspect=False):
+    '''Resize an image with the option to preserve aspect ratio'''
+    dimw = dim[0]
+    dimh = dim[1]
+    if preserve_aspect:
+        h, w = frame.shape[:2]
+        aspect = w/h
+        if w > h:
+            dimh = round(dimw/aspect)
+        else:
+            dimw = round(dimh/aspect)
+    imsize = (dimw, dimh)
+    return cv2.resize(frame, imsize)
+
+
 if __name__ == "__main__":
     ################################################################################################
     # Setup
@@ -136,7 +151,7 @@ if __name__ == "__main__":
 
                 if frame is not None:
                     # Scale and save the image to send in the notification
-                    frame = cv2.resize(frame, st.analysis_image_size)
+                    frame = resize_image(frame, st.analysis_image_size, preserve_aspect=True)
                     cv2.imwrite(st.tmp_analysis_image, frame)
 
                     # Send notifications. Possible situations:
