@@ -48,7 +48,58 @@ if __name__ == "__main__":
     # Set up notifiers
     notifier = Notification(st.tmp_message_file, st.tmp_analysis_image)
 
-    # Set up object detection
+    # Set up only the object detectors needed
+    detectors = {}
+    classes_path_map = {}
+    for mname in st.monitors:
+        ms = st.monitors[mname]
+        if ms["detect_objects"]:
+            if ms["detection_model"] == "Darknet":
+                if not "Darknet" in detectors:
+                    darknet_detector = Detectors.DetectorDarknet("Darknet", st.darknet_config,
+                                       st.darknet_model, st.darknet_detect_classes,
+                                       st.darknet_confidence_threshold,
+                                       analysis_size=st.darknet_analysis_size)
+                    detectors["Darknet"] = darknet_detector
+                    classes_path_map["Darknet"] = st.darknet_classes
+            elif ms["detection_model"] == "MobileNetV3":
+                if not "MobileNetV3"  in detectors:
+                    mobilenet_detector = Detectors.DetectorSSDMobileNetV3("MobileNetV3",
+                                         st.mobilenet_config, st.mobilenet_model,
+                                         st.mobilenet_detect_classes,
+                                         st.mobilenet_confidence_threshold)
+                    detectors["MobileNetV3"] = mobilenet_detector
+                    classes_path_map["MobileNetV3"] = st.mobilenet_classes
+            elif ms["detection_model"] == "InceptionV2":
+                if not "InceptionV2" in detectors:
+                    inception_detector = Detectors.DetectorTensorFlow("InceptionV2",
+                                         st.inception_config, st.inception_model,
+                                         st.inception_detect_classes,
+                                         st.inception_confidence_threshold,
+                                         analysis_size=st.inception_analysis_size)
+                    detectors["InceptionV2"] = inception_detector
+                    classes_path_map["InceptionV2"] = st.inception_classes
+            elif ms["detection_model"] == "HOG":
+                if not "HOG" in detectors:
+                    hog_detector = Detectors.DetectorHOG("HOG", st.hog_analysis_size,
+                                   st.hog_winstride, st.hog_scale)
+                    detectors["HOG"] = hog_detector
+                    classes_path_map["HOG"] = ""
+            else:
+                zm_util.debug("Unsupported detection model {:s}.\n".format(ms["detection_model"]),
+                              "stderr")
+                sys.exit(1)
+
+    # Read classes and initialize detector networks
+    for detector_name, detector in detectors.items():
+        check = detector.initializeNetwork()
+        check1 = detector.readClasses(classes_path_map[detector_name])
+        if not check or not check1:
+            zm_util.debug("There was an error setting up {:s} detector.".format(detector_name),
+                          "stderr")
+            sys.exit(1)
+
+    # Set up monitors
     monitors = []
     for api_mon in api_monitors:
         # Reference to settings for this monitor
@@ -56,39 +107,12 @@ if __name__ == "__main__":
         mid = api_mon["id"]
         ms = st.monitors[mname]
 
-        # Set up the object detector for this monitor
+        # Associate object detector
+        detector = None
         if ms["detect_objects"]:
-            if ms["detection_model"] == "Darknet":
-                classes_path = st.darknet_classes
-                detector = Detectors.DetectorDarknet(mname, st.darknet_config, st.darknet_model,
-                           ms["detect_classes"], ms["confidence_threshold"],
-                           analysis_size=st.darknet_analysis_size)
-            elif ms["detection_model"] == "MobileNetV3":
-                classes_path = st.mobilenet_classes
-                detector = Detectors.DetectorSSDMobileNetV3(mname, st.mobilenet_config,
-                           st.mobilenet_model, ms["detect_classes"], ms["confidence_threshold"])
-            elif ms["detection_model"] == "InceptionV2":
-                classes_path = st.inception_classes
-                detector = Detectors.DetectorTensorFlow(mname, st.inception_config,
-                           st.inception_model, ms["detect_classes"], ms["confidence_threshold"],
-                           analysis_size=st.inception_analysis_size)
-            elif ms["detection_model"] == "HOG":
-                classes_path = ""
-                detector = Detectors.DetectorHOG(mname, st.hog_analysis_size, st.hog_winstride,
-                           st.hog_scale)
-            else:
-                zm_util.debug("{:s} is not a valid detection model.".format(ms["detection_model"]),
-                              "stderr")
-                zmapi.logout()
-                sys.exit(1)
-            check = detector.initializeNetwork()
-            check1 = detector.readClasses(classes_path)
-            if not check or not check1:
-                zm_util.debug("There was an error setting up detector for {:s}.".format(mname),
-                              "stderr")
-                sys.exit(1)
+            detector = detectors[ms["detection_model"]]
 
-        # Append the monitor to the list
+        # Append to the list
         monitors.append(Monitor(mname, mid, zmapi, detector, ms["detect_objects"], ms["detect_in"]))
 
     ################################################################################################

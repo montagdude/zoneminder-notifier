@@ -115,6 +115,11 @@ class Settings:
                                                         required=False, default=darknet_width)
             darknet_height = zm_util.get_int_from_config(config, section, "analysis_height",
                                                         required=False, default=darknet_height)
+            detect_classes = zm_util.get_from_config(config, section, "detect_classes",
+                                                     required=False, default="person")
+            self.darknet_detect_classes = detect_classes.replace(" ", "").split(",")
+            self.darknet_confidence_threshold = zm_util.get_float_from_config(config, section,
+                                                "confidence_threshold", required=False, default=0.4)
         self.darknet_analysis_size = (darknet_width,darknet_height)
 
         section = "MobileNetV3"
@@ -131,6 +136,11 @@ class Settings:
                                                       required=False, default=self.mobilenet_config)
             self.mobilenet_classes = zm_util.get_from_config(config, section, "classes_path",
                                                      required=False, default=self.mobilenet_classes)
+            detect_classes = zm_util.get_from_config(config, section, "detect_classes",
+                                                     required=False, default="person")
+            self.mobilenet_detect_classes = detect_classes.replace(" ", "").split(",")
+            self.mobilenet_confidence_threshold = zm_util.get_float_from_config(config, section,
+                                                "confidence_threshold", required=False, default=0.4)
 
         section = "InceptionV2"
         datadir = "ssd_inception_v2_coco_2017_11_17"
@@ -152,6 +162,11 @@ class Settings:
                                                           required=False, default=inception_width)
             inception_height = zm_util.get_int_from_config(config, section, "analysis_height",
                                                            required=False, default=inception_height)
+            detect_classes = zm_util.get_from_config(config, section, "detect_classes",
+                                                     required=False, default="person")
+            self.inception_detect_classes = detect_classes.replace(" ", "").split(",")
+            self.inception_confidence_threshold = zm_util.get_float_from_config(config, section,
+                                                "confidence_threshold", required=False, default=0.4)
         self.inception_analysis_size = (inception_width,inception_height)
 
         section = "HOG"
@@ -189,8 +204,6 @@ class Settings:
             self.monitors[mname] = {}
             detect_objects = False
             detection_model = ""
-            detect_classes = []
-            confidence_threshold = 0.4
             detect_in = ""
             if not config.has_section(mname):
                 zm_util.debug("No config section for {:s}, not doing object detection." \
@@ -200,15 +213,8 @@ class Settings:
                                                               required=False, default=False)
                 detection_model = zm_util.get_from_config(config, mname, "detection_model",
                                                           required=False, default="Darknet")
-                detect_classes = zm_util.get_from_config(config, mname, "detect_classes",
-                                                         required=False, default="person")
-                detect_classes = detect_classes.replace(" ", "").split(",")
-                confidence_threshold = zm_util.get_float_from_config(config, mname,
-                                                "confidence_threshold", required=False, default=0.4)
                 detect_in = zm_util.get_from_config(config, mname, "detect_in", required=False,
                                                     default="image")
             self.monitors[mname]["detect_objects"] = detect_objects
             self.monitors[mname]["detection_model"] = detection_model
-            self.monitors[mname]["detect_classes"] = detect_classes
-            self.monitors[mname]["confidence_threshold"] = confidence_threshold
             self.monitors[mname]["detect_in"] = detect_in
