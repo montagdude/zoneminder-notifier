@@ -211,9 +211,9 @@ class ZMAPI:
 
         res = {'id':-1, 'maxscore_frameid':0, 'path':"", 'video_name':""}
 
-        # Get the list of events for this monitor in descending order based on EndTime
+        # Get the list of events for this monitor in descending order based on StartTime
         monitor_url = self.apipath + '/events/index/MonitorId:{:d}.json'.format(monitorID)
-        r = self._makeRequest(monitor_url, params=['page=1', 'sort=EndTime', 'direction=desc'])
+        r = self._makeRequest(monitor_url, params=['page=1', 'sort=StartTime', 'direction=desc'])
         if not r.ok:
             self.debug(1, "Error getting events in getMonitorLatestEvent", "stderr")
             return res

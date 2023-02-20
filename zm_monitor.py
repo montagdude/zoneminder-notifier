@@ -38,11 +38,11 @@ class Monitor:
         self.active = self.api.getMonitorDaemonStatus(self.id)
         return self.active
 
-    def eventImage(self, event):
+    def eventImage(self, event, imgfile="snapshot.jpg"):
         '''Returns the path to the latest event image'''
         if event['id'] == -1:
             return None
-        return os.path.join(event['path'], "snapshot.jpg")
+        return os.path.join(event['path'], imgfile)
 
     def eventVideo(self, event):
         '''Returns the path to the latest event video'''
@@ -54,7 +54,7 @@ class Monitor:
         '''Gets a new event from the API. Returns True if there is a new event to process, False
            if not. An event is considered ready to be processed if:
            1. It is different from the one already in memory.
-           2. The max score frame is available.'''
+           2. The max score frame or alarm frame is available.'''
 
         ret = False
 
@@ -72,6 +72,10 @@ class Monitor:
             if os.path.isfile(self.eventImage(event)):
                 self.latest_event = event
                 ret = True
+            # The max score frame isn't there yet, but the alarm frame is
+            elif os.path.isfile(self.eventImage(event, "alarm.jpg")):
+                self.latest_event = event
+                ret = True
             idx += 1
 
         return ret
@@ -85,16 +89,26 @@ class Monitor:
         objclass = ""
         maxconfidence = 0.0
 
-        # Get the max score image file
+        # Get the event image file. First try the maxscore frame (snapshot.jpg), but if that's
+        # not available, try the alarm frame (alarm.jpg).
+        has_img = True
         maxscore_img = self.eventImage(self.latest_event)
-        if maxscore_img is None or not os.path.isfile(maxscore_img):
-            self.debug("Max score image not present on disk.")
+        alarm_img = self.eventImage(self.latest_event, "alarm.jpg")
+        event_img = None
+        if maxscore_img is not None and os.path.isfile(maxscore_img):
+            event_img = maxscore_img
+        elif alarm_img is not None and os.path.isfile(alarm_img):
+            event_img = alarm_img
+        else:
+            has_img = False
+        if not has_img:
+            self.debug("Event image not present on disk.")
             return frame, objclass, maxconfidence
 
         # Open the max score frame. Since we've already checked that the file exists on disk,
         # this should return a valid frame object, but it will be None if there is a problem
         # reading it.
-        frame = imread(maxscore_img)
+        frame = imread(event_img)
 
         # Return the max score frame if we're not doing object detection
         if not self.detect_objects:
@@ -118,7 +132,7 @@ class Monitor:
                     return bestframe, objclass, maxconfidence
 
         # Detect objects in max score image
-        bestframe, classes, confidences = self.detector.detectInImage(maxscore_img,
+        bestframe, classes, confidences = self.detector.detectInImage(event_img,
                                           annotate_name=False, show=False)
         if bestframe is None:
             self.debug("Error opening max score image. No detection done.", "stderr")
