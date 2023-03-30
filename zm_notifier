@@ -113,7 +113,11 @@ if __name__ == "__main__":
             detector = detectors[ms["detection_model"]]
 
         # Append to the list
-        monitors.append(Monitor(mname, mid, zmapi, detector, ms["detect_objects"], ms["detect_in"]))
+        if ms["check_events"]:
+            monitors.append(Monitor(mname, mid, zmapi, detector, ms["detect_objects"],
+                            ms["detect_in"]))
+        else:
+            zm_util.debug("Not appending monitor {:s} because check_events is False.".format(mname))
 
     ################################################################################################
     # Main loop

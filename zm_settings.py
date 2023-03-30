@@ -205,10 +205,13 @@ class Settings:
             detect_objects = False
             detection_model = ""
             detect_in = ""
+            self.monitors[mname]["check_events"] = True
             if not config.has_section(mname):
                 zm_util.debug("No config section for {:s}, not doing object detection." \
                               .format(mname))
             else:
+                self.monitors[mname]["check_events"] = zm_util.get_bool_from_config(config, mname,
+                                                       "check_events", required=False, default=True)
                 detect_objects = zm_util.get_bool_from_config(config, mname, "detect_objects",
                                                               required=False, default=False)
                 detection_model = zm_util.get_from_config(config, mname, "detection_model",
