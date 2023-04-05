@@ -123,6 +123,7 @@ if __name__ == "__main__":
     # Main loop
     ################################################################################################
     last_status = "Not running"
+    last_runstate = "__None__"
     while True:
         sys.stdout.flush()
         sys.stderr.flush()
@@ -134,6 +135,23 @@ if __name__ == "__main__":
                 last_status = "Not running"
             time.sleep(st.stopped_timeout)
             continue
+
+        # Get the active runstate
+        runstates = zmapi.getRunStates()
+        active_runstate = "__None__"
+        for runstate in runstates:
+            if runstate["active"]:
+                active_runstate = runstate["name"]
+                break
+        if active_runstate != last_runstate:
+            zm_util.debug("ZoneMinder is now in {:s} state.".format(active_runstate))
+            last_runstate = active_runstate
+
+        # If ZoneMinder is in the runstate for no notifications, pause and start over
+        if st.no_notification_runstate is not "":
+            if active_runstate == st.no_notification_runstate:
+                time.sleep(st.stopped_timeout)
+                continue
 
         # Update status if needed
         if last_status == "Not running":

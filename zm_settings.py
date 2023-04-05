@@ -50,6 +50,8 @@ class Settings:
                                             default="")
         self.notify_no_object = zm_util.get_bool_from_config(config, section, "notify_no_object",
                                                              required=False, default=False)
+        self.no_notification_runstate = zm_util.get_from_comfig(config, section,
+                                             "no_notification_runstate", required=False, default="")
 
         # Convert email addresses and attachment settings to lists
         if addresses != "":
