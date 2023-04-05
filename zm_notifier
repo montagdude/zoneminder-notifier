@@ -147,11 +147,11 @@ if __name__ == "__main__":
             zm_util.debug("ZoneMinder is now in {:s} state.".format(active_runstate))
             last_runstate = active_runstate
 
-        # If ZoneMinder is in the runstate for no notifications, pause and start over
+        # Check if ZoneMinder is in the runstate for no notifications
+        notify = True
         if st.no_notification_runstate != "":
             if active_runstate == st.no_notification_runstate:
-                time.sleep(st.stopped_timeout)
-                continue
+                notify = False
 
         # Update status if needed
         if last_status == "Not running":
@@ -195,7 +195,7 @@ if __name__ == "__main__":
                 msg_head += "\n" + event_url
                 msg_detect ="Detected {:s}, confidence {:.2f}"
 
-                if frame is not None:
+                if frame is not None and notify:
                     # Scale and save the image to send in the notification
                     frame = resize_image(frame, st.analysis_image_size, preserve_aspect=True)
                     cv2.imwrite(st.tmp_analysis_image, frame)
@@ -224,7 +224,12 @@ if __name__ == "__main__":
                     else:
                         notifier.sendNotifications(msg_head, st.to_addresses, st.pushover_data)
                 else:
-                    zm_util.debug("No image. Skipping event {:d}.\n".format(eventid), "stderr")
+                    if frame is None:
+                        zm_util.debug("No image. Skipping event {:d}.".format(eventid), "stderr")
+                    elif not notify:
+                        msg = "In {:s} state; not sending notifications." \
+                              .format(active_runstate)
+                        zm_util.debug(msg)
 
         # Wait for the next cycle
         time.sleep(st.running_timeout)
