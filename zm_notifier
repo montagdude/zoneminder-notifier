@@ -148,7 +148,7 @@ if __name__ == "__main__":
             last_runstate = active_runstate
 
         # If ZoneMinder is in the runstate for no notifications, pause and start over
-        if st.no_notification_runstate is not "":
+        if st.no_notification_runstate != "":
             if active_runstate == st.no_notification_runstate:
                 time.sleep(st.stopped_timeout)
                 continue
