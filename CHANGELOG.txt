@@ -1,0 +1,6 @@
+0.2.1 [lubolura]
+    - the analyse triger is fired once the event is finished now (prevent missing video file error)
+    - best (maxscored) image frame for analyse is selected from zoneminder database
+
+0.2
+    -

@@ -1,6 +1,8 @@
 import sys
+import mysql.connector
 from datetime import datetime
 from configparser import NoOptionError
+
 
 def debug(message, pipe="stdout"):
 
@@ -73,3 +75,22 @@ def get_float_from_config(config, section, option, required=True, default=None):
         sys.exit(1)
 
     return val
+
+
+def get_highest_scored_image(event):
+    try:
+        conn = mysql.connector.connect(host='localhost',
+                                       database='zm',
+                                       user='zmuser',
+                                       password='zmpass',
+                                       auth_plugin='mysql_native_password')
+        with conn.cursor() as cursor:
+            # Read data from database
+            sql = """select FrameID from Frames where ID = {}""".format(event['maxscore_frameid'])
+            cursor.execute(sql)
+            row = cursor.fetchone()
+            return row[0] if row != None else -1
+    except Exception as e:
+        sys.stderr.write(f"Error to get data from database : {e}\n")
+        return -1
+

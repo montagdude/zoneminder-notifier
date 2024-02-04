@@ -1,7 +1,8 @@
 import sys
 import os
 from cv2 import imread
-from zm_util import debug
+from zm_util import debug,get_highest_scored_image
+
 
 class Monitor:
     def __init__(self, monitor_name, monitor_id, zmapi, detector=None, detect_objects=True,
@@ -30,6 +31,9 @@ class Monitor:
         # Save active state
         self.checkActive()
 
+        self.best_image_for_analyse = None
+
+
     def debug(self, message, pipename='stdout'):
         debug("{:s}: {:s}".format(self.name, message), pipename)
 
@@ -38,11 +42,27 @@ class Monitor:
         self.active = self.api.getMonitorDaemonStatus(self.id)
         return self.active
 
-    def eventImage(self, event, imgfile="snapshot.jpg"):
-        '''Returns the path to the latest event image'''
+    def get_event_image_filename(self, event):
+        '''Returns the path to the best event image'''
         if event['id'] == -1:
             return None
-        return os.path.join(event['path'], imgfile)
+        PictureID = get_highest_scored_image(event)
+        if PictureID > -1:
+            imgfile = os.path.join(event['path'], f"{PictureID:05d}-capture.jpg")
+            if os.path.isfile(imgfile):
+                return imgfile
+
+        # The max score frame isn't there yet, but the snapshot frame is
+        imgfile = os.path.join(event['path'],"snapshot.jpg")
+        if os.path.isfile(imgfile):
+            return imgfile
+
+        # The max score frame isn't there yet, but the alarm frame is
+        imgfile = os.path.join(event['path'],"alarm.jpg")
+        if os.path.isfile(imgfile):
+            return imgfile
+
+        return None
 
     def eventVideo(self, event):
         '''Returns the path to the latest event video'''
@@ -69,11 +89,8 @@ class Monitor:
             if event['id'] == self.latest_event['id']:
                 break
             # The max score frame for this event exists
-            if os.path.isfile(self.eventImage(event)):
-                self.latest_event = event
-                ret = True
-            # The max score frame isn't there yet, but the alarm frame is
-            elif os.path.isfile(self.eventImage(event, "alarm.jpg")):
+            self.best_image_for_analyse = self.get_event_image_filename(event)
+            if self.best_image_for_analyse != None:
                 self.latest_event = event
                 ret = True
             idx += 1
@@ -88,27 +105,17 @@ class Monitor:
         frame = None
         objclass = ""
         maxconfidence = 0.0
-
-        # Get the event image file. First try the maxscore frame (snapshot.jpg), but if that's
-        # not available, try the alarm frame (alarm.jpg).
-        has_img = True
-        maxscore_img = self.eventImage(self.latest_event)
-        alarm_img = self.eventImage(self.latest_event, "alarm.jpg")
-        event_img = None
-        if maxscore_img is not None and os.path.isfile(maxscore_img):
-            event_img = maxscore_img
-        elif alarm_img is not None and os.path.isfile(alarm_img):
-            event_img = alarm_img
-        else:
-            has_img = False
-        if not has_img:
+        # is there best image to analyse ?
+        if self.best_image_for_analyse == None:
             self.debug("Event image not present on disk.")
             return frame, objclass, maxconfidence
+
+        self.debug(f"Event image analyse started. {self.best_image_for_analyse}")
 
         # Open the max score frame. Since we've already checked that the file exists on disk,
         # this should return a valid frame object, but it will be None if there is a problem
         # reading it.
-        frame = imread(event_img)
+        frame = imread(self.best_image_for_analyse)
 
         # Return the max score frame if we're not doing object detection
         if not self.detect_objects:
@@ -132,8 +139,8 @@ class Monitor:
                     return bestframe, objclass, maxconfidence
 
         # Detect objects in max score image
-        bestframe, classes, confidences = self.detector.detectInImage(event_img,
-                                          annotate_name=False, show=False)
+        bestframe, classes, confidences = self.detector.detectInImage(self.best_image_for_analyse,
+                                                                      annotate_name=False, show=False)
         if bestframe is None:
             self.debug("Error opening max score image. No detection done.", "stderr")
         else:
