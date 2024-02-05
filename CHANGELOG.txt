@@ -1,7 +1,21 @@
 0.3.0 [lubolura]
-    - events as well as frames are now selected from database only, not via API
-    - all frames/pictures within event with higher score than score_treshold is are now analyzed !
+    - events as well as frames are now selected from database, not via API
     - in case of video analyse - video is analysed as soon as is created
+
+    - score_treshold in cfg file :
+      when there is "detect_in: image", the "score_treshold" filter is applaied for
+      all available images. Images with higher score than this, are continously
+      analyzed as soon as they are available. It should be range 0-255.
+      If score_treshold is set to 0, all images are analyzed
+      (this is demand/impact to computer performance in this case! ).
+      the default value is 1
+
+    - positive_detections_per_event_in_batch_limit in cfg file :
+      how many positive detection/frames interrupt continously frames analyze process in one batch per one event.
+      Batch size depends on [Daemon] section setup, each round means one batch in this case
+      ( it can be that one event has multiple batches, in case that event takes longer than one round)
+      the default value is 1
+
 
 0.2.1 [lubolura]
     - the analyse triger is fired once the event is finished now (prevent missing video file error)
