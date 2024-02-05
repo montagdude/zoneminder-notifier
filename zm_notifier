@@ -91,7 +91,7 @@ if __name__ == "__main__":
         # Append to the list
         if ms["check_events"]:
             monitors.append(Monitor(mname, mid, zmapi, detector, ms["detect_objects"],
-                            ms["detect_in"]))
+                            ms["detect_in"],ms["score_treshold"]))
         else:
             zm_util.debug("Not appending monitor {:s} because check_events is False.".format(mname))
 
