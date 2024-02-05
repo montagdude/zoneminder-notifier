@@ -172,30 +172,37 @@ if __name__ == "__main__":
                 zm_util.debug(f"--> New batch processing started ( size : {len(monitor.EventPicturesList)} )")
             current_event_id = 0
             for _index in range(len(monitor.EventPicturesList)):
+
                 current_frame = monitor.EventPicturesList[_index]
-                current_frame = current_frame + (f"{_index + 1}/{len(monitor.EventPicturesList)} "
-                                                 f"scored {current_frame[monitor.FRAME_SCORE]}",)
 
                 # restart for new event in batch
                 if current_event_id != current_frame[monitor.EVENT_ID_POSITION]:
                     positive_detections_in_current_event = 0
                     current_event_id = current_frame[monitor.EVENT_ID_POSITION]
 
+                # enhance printing with some figures :-)
+                current_frame = current_frame + (f"event {current_event_id}, {_index + 1}/"
+                                                 f"{len(monitor.EventPicturesList)} "
+                                                 f"scored {current_frame[monitor.FRAME_SCORE]}",)
+
                 # check if its enough within this event/batch
                 if positive_detections_in_current_event >= monitor.positive_detections_per_event_in_batch_limit:
                     # so, is enough , dont need to continue to check other frames within this event
-                    zm_util.debug("{} of positive detections achieved for event {} ,"
+                    zm_util.debug("{} positive detections achieved,"
                                   " skipping {}.".format(monitor.positive_detections_per_event_in_batch_limit,
-                                                         current_event_id, current_frame[monitor.STATS_TO_PRINT]))
+                                                          current_frame[monitor.STATS_TO_PRINT]))
                     continue
 
-                frame, objclass, confidence = monitor.detectObjects(current_frame)
+                frame, objclass, confidence, processed = monitor.detectObjects(current_frame)
+
+                # just remember last processed position/frame
+                if processed:
+                    # yes, it was analysed
+                    monitor.latest_EventPictureID = current_frame[monitor.ID_POSITION]  # last frame.ID
+
                 # do we have positive identification ?
                 if objclass != "":
                     positive_detections_in_current_event = positive_detections_in_current_event + 1
-
-                # just remember last processed position/frame
-                monitor.latest_EventPictureID = current_frame[monitor.ID_POSITION]  # last frame.ID
 
                 # Set some data for the message
                 event_url = "" # TODO zmapi.getEventURL(eventid)
@@ -222,7 +229,7 @@ if __name__ == "__main__":
                             msg = msg_head + "\n" + msg_detect
                             notifier.sendNotifications(msg, st.to_addresses, st.pushover_data, tmp_analysis_filenames)
                         else:
-                            zm_util.debug("No objects detected in event {:d}.".format(current_event_id))
+                            zm_util.debug("No objects detected in {}.".format(current_frame[monitor.STATS_TO_PRINT]))
                             # Send notifications even with no detections if requested
                             if st.notify_no_object:
                                 notifier.sendNotifications(msg_head, st.to_addresses,

@@ -95,7 +95,7 @@ def get_highest_scored_image(event):
         return -1
 
 
-def get_new_pictures_list(score_treshold,monitor_id,latest_EventPictureID):
+def get_new_pictures_list(score_treshold,monitor_id,latest_EventPictureID,detect_in):
     try:
         conn = mysql.connector.connect(host='localhost',
                                        database='zm',
@@ -104,6 +104,34 @@ def get_new_pictures_list(score_treshold,monitor_id,latest_EventPictureID):
                                        auth_plugin='mysql_native_password')
         with conn.cursor() as cursor:
             # Read data from database
+            if detect_in == 'video':
+                # firstly we try to pick last one record/frame for video per event
+                sql_video_frames = """select max(f.Id) as ID
+                                        from 
+                                            (select Frames.ID as ID,Frames.EventID as EventID
+                                            from   zm.Frames,zm.Events
+                                            where  Frames.EventID = Events.ID
+                                            and    Frames.Score >= {}
+                                            and    Events.MonitorID = {}
+                                            and    Frames.ID > {} ) as f
+                                        group by f.EventID  
+                                        order by ID""".format(score_treshold, monitor_id,latest_EventPictureID)
+                if (latest_EventPictureID == -1):
+                    # just last one - init after start
+                    sql_video_frames = sql_video_frames + " desc limit 1"
+
+                cursor.execute(sql_video_frames)
+                video_frames = cursor.fetchall()
+
+                # there are no new records
+                if len(video_frames) == 0:
+                    return []
+
+                video_frames_str = ", ".join(str(frame[0]) for frame in video_frames)
+                frames_selection = f"in ({video_frames_str})"
+            else:
+                frames_selection = f" > {latest_EventPictureID}"
+
 
             sql = """select Frames.ID as ID,Frames.FrameID as FrameID,Frames.Score as Score,Events.ID as EventID,
                            Events.StartDateTime as StartDateTime,Events.DefaultVideo as VideoFile,  
@@ -112,12 +140,12 @@ def get_new_pictures_list(score_treshold,monitor_id,latest_EventPictureID):
                     where  Frames.EventID = Events.ID
                     and    Frames.Score >= {}
                     and    Events.MonitorID = {}
-                    and    Frames.ID > {}
+                    and    Frames.ID {}
                     and    (Events.StorageID+1) = Storage.ID
-                    order by Frames.ID""".format(score_treshold, monitor_id,latest_EventPictureID)
+                    order by Frames.ID""".format(score_treshold, monitor_id,frames_selection)
             if (latest_EventPictureID==-1):
                 # just last one - init after start
-                sql = sql + " DESC LIMIT 1"
+                sql = sql + " desc limit 1"
             cursor.execute(sql)
             rows = cursor.fetchall()
             return rows if rows != None else []

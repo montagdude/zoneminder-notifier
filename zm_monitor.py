@@ -121,7 +121,7 @@ class Monitor:
            1. It is different from the one already in memory.
            2. The max score frame or alarm frame is available.'''
 
-        self.EventPicturesList = get_new_pictures_list(self.score_treshold, self.id, self.latest_EventPictureID)
+        self.EventPicturesList = get_new_pictures_list(self.score_treshold, self.id, self.latest_EventPictureID,self.detect_in)
         #if len(self.EventPicturesList) > 0:
         #    self.latest_EventPictureID = self.EventPicturesList[-1][self.ID_POSITION] # last frame.ID
 
@@ -143,47 +143,56 @@ class Monitor:
         frame = None
         objclass = ""
         maxconfidence = 0.0
+        # just prepare for future usage if video was analysed or we have to again in next batch
+        processed_flag = True if self.detect_in == "image" else False
+
         if not self.detect_objects:
-            return frame, objclass, maxconfidence
+            return frame, objclass, maxconfidence,processed_flag
 
-
+        # construct correct filename and check if it exists
         self.current_frame_for_analyse = self.get_filename_from_one_frame(_frame)
-        self.debug(f"Frame analyse started. ({_frame[self.STATS_TO_PRINT]} : {self.current_frame_for_analyse})")
-
-        # Open the max score frame. Since we've already checked that the file exists on disk,
-        # this should return a valid frame object, but it will be None if there is a problem
-        # reading it.
-        frame = imread(self.current_frame_for_analyse)
-
-        # Return the max score frame if we're not doing object detection
+        if not os.path.isfile(self.current_frame_for_analyse):
+            self.debug(f"Cannot open frame file . ({_frame[self.STATS_TO_PRINT]} : {self.current_frame_for_analyse})")
+            return frame, objclass, maxconfidence,processed_flag
 
         # Detect objects in video. We'll default to the max score image if there is a problem
         # reading the video.
         if self.detect_in == "video":
-            #video_file = self.eventVideo(self.latest_event)
+
+            # construct correct filename and check if it exists
             video_file = self.get_video_filename_from_one_frame(_frame)
+            self.debug(f"Video analyse started. ({_frame[self.EVENT_ID_POSITION]} : {video_file})")
+
             if not os.path.isfile(video_file):
-                self.debug("Event video not present on disk. Detecting in max score frame instead.")
+                self.debug("Event video not present on disk. Detecting in most fresh frame instead.")
             else:
-                bestframe, classes, confidences = self.detector.detectInVideo(video_file,
+                bestframe, classes, confidences,processed_flag = self.detector.detectInVideo(video_file,
                                                   annotate_name=False, show=False,
                                                   annotate_fps=False, return_first_detection=True)
                 if bestframe is None:
-                    self.debug("No objects found. Trying max score image instead.")
+                    if processed_flag is True :
+                        self.debug("No object detected in video -> trying most fresh frame image instead.")
+                    else:
+                        self.debug("Cannot analyze video -> trying most fresh frame image instead.")
                 else:
                     maxconfidence = max(confidences)
                     objclass = classes[confidences.index(maxconfidence)]
-                    return bestframe, objclass, maxconfidence
+                    return bestframe, objclass, maxconfidence, processed_flag
 
         # Detect objects in max score image
+        # Open the max score frame.
+        # this should return a valid frame object, but it will be None if there is a problem
+        # reading it.
+        self.debug(f"Frame analyse started. ({_frame[self.STATS_TO_PRINT]} : {self.current_frame_for_analyse})")
+        frame = imread(self.current_frame_for_analyse)
         bestframe, classes, confidences = self.detector.detectInImage(self.current_frame_for_analyse,
                                                                       annotate_name=False, show=False)
         if bestframe is None:
-            self.debug("Error opening max score image. No detection done.", "stderr")
+            self.debug("Error opening frame. No detection done.", "stderr")
         else:
             frame = bestframe
             if len(confidences) > 0:
                 maxconfidence = max(confidences)
                 objclass = classes[confidences.index(maxconfidence)]
 
-        return frame, objclass, maxconfidence
+        return frame, objclass, maxconfidence,processed_flag
