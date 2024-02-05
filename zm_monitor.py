@@ -6,32 +6,37 @@ from zm_util import debug,get_highest_scored_image,get_new_pictures_list
 
 
 class Monitor:
-    def __init__(self, monitor_name, monitor_id, zmapi, detector=None, detect_objects=True,
-                 detect_in="image",score_treshold = 1):
+    def __init__(self, monitor_name, monitor_id, zmapi, detector, ms):
         '''Initialize monitor with name, id, pointers to ZMAPI and detector instances, and detection
            settings'''
         self.name = monitor_name
         self.id = monitor_id
         self.api = zmapi
         self.detector = detector
-        self.detect_objects = detect_objects
-        self.detect_in = detect_in
+        self.detect_objects = ms["detect_objects"]
+        self.detect_in = ms["detect_in"]
+        self.score_treshold = ms["score_treshold"]
+        self.positive_detections_per_event_in_batch_limit = ms["positive_detections_per_event_in_batch_limit"]
+
         self.ID_POSITION = 0
         self.FRAME_ID_POSITION = 1
-        self.EVENT_ID_POSITION = 2
-        self.START_DATE_POSITION = 3
-        self.VIDEO_FILENAME_POSITION = 4
-        self.STORAGE_PATH_POSITION = 5
-
-        self.score_treshold = score_treshold
+        self.FRAME_SCORE = 2
+        self.EVENT_ID_POSITION = 3
+        self.START_DATE_POSITION = 4
+        self.VIDEO_FILENAME_POSITION = 5
+        self.STORAGE_PATH_POSITION = 6
+        self.STATS_TO_PRINT = 7
 
         # Sanity checks
         if self.detect_objects:
-            if detector is None:
+            if self.detector is None:
                 self.debug("Must pass a detector to detect objects.", "stderr")
                 sys.exit(1)
-            if not detect_in in ["image", "video"]:
+            if not self.detect_in in ["image", "video"]:
                 self.debug("detect_in must be 'image' or 'video'.", "stderr")
+                sys.exit(1)
+            if not self.score_treshold in range(0,256):
+                self.debug("score_treshold must be in range 0..255.", "stderr")
                 sys.exit(1)
 
         # Get latest event
@@ -44,7 +49,7 @@ class Monitor:
         # Save active state
         self.checkActive()
 
-        self.best_image_for_analyse = None
+        self.current_frame_for_analyse = None
 
 
     def debug(self, message, pipename='stdout'):
@@ -102,8 +107,8 @@ class Monitor:
             if event['id'] == self.latest_event['id']:
                 break
             # The max score frame for this event exists
-            self.best_image_for_analyse = self.get_event_image_filename(event)
-            if self.best_image_for_analyse != None:
+            self.current_frame_for_analyse = self.get_event_image_filename(event)
+            if self.current_frame_for_analyse != None:
                 self.latest_event = event
                 ret = True
             idx += 1
@@ -117,13 +122,17 @@ class Monitor:
            2. The max score frame or alarm frame is available.'''
 
         self.EventPicturesList = get_new_pictures_list(self.score_treshold, self.id, self.latest_EventPictureID)
-        if len(self.EventPicturesList) > 0:
-            self.latest_EventPictureID = self.EventPicturesList[-1][self.ID_POSITION] # last frame.ID
+        #if len(self.EventPicturesList) > 0:
+        #    self.latest_EventPictureID = self.EventPicturesList[-1][self.ID_POSITION] # last frame.ID
 
     def get_filename_from_one_frame(self,one_frame):
-        return f"{one_frame[self.STORAGE_PATH_POSITION]}/{self.id}/{one_frame[self.START_DATE_POSITION].strftime('%Y-%m-%d')}/{one_frame[self.EVENT_ID_POSITION]}/{one_frame[self.FRAME_ID_POSITION]:05d}-capture.jpg"
+        return (f"{one_frame[self.STORAGE_PATH_POSITION]}/{self.id}/"
+                f"{one_frame[self.START_DATE_POSITION].strftime('%Y-%m-%d')}/{one_frame[self.EVENT_ID_POSITION]}/"
+                f"{one_frame[self.FRAME_ID_POSITION]:05d}-capture.jpg")
     def get_video_filename_from_one_frame(self,one_frame):
-        return f"{one_frame[self.STORAGE_PATH_POSITION]}/{self.id}/{one_frame[self.START_DATE_POSITION].strftime('%Y-%m-%d')}/{one_frame[self.EVENT_ID_POSITION]}/{one_frame[self.VIDEO_FILENAME_POSITION]}"
+        return (f"{one_frame[self.STORAGE_PATH_POSITION]}/{self.id}/"
+                f"{one_frame[self.START_DATE_POSITION].strftime('%Y-%m-%d')}/"
+                f"{one_frame[self.EVENT_ID_POSITION]}/{one_frame[self.VIDEO_FILENAME_POSITION]}")
 
 
     def detectObjects(self, _frame):
@@ -138,13 +147,13 @@ class Monitor:
             return frame, objclass, maxconfidence
 
 
-        self.best_image_for_analyse = self.get_filename_from_one_frame(_frame)
-        self.debug(f"Event image analyse started. {self.best_image_for_analyse}")
+        self.current_frame_for_analyse = self.get_filename_from_one_frame(_frame)
+        self.debug(f"Frame analyse started. ({_frame[self.STATS_TO_PRINT]} : {self.current_frame_for_analyse})")
 
         # Open the max score frame. Since we've already checked that the file exists on disk,
         # this should return a valid frame object, but it will be None if there is a problem
         # reading it.
-        frame = imread(self.best_image_for_analyse)
+        frame = imread(self.current_frame_for_analyse)
 
         # Return the max score frame if we're not doing object detection
 
@@ -167,7 +176,7 @@ class Monitor:
                     return bestframe, objclass, maxconfidence
 
         # Detect objects in max score image
-        bestframe, classes, confidences = self.detector.detectInImage(self.best_image_for_analyse,
+        bestframe, classes, confidences = self.detector.detectInImage(self.current_frame_for_analyse,
                                                                       annotate_name=False, show=False)
         if bestframe is None:
             self.debug("Error opening max score image. No detection done.", "stderr")

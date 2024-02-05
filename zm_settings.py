@@ -193,7 +193,8 @@ class Settings:
             detection_model = ""
             detect_classes = []
             confidence_threshold = 0.4
-            score_treshold = 0
+            score_treshold = 1
+            positive_detections_per_event_in_batch_limit = 1
             detect_in = ""
             self.monitors[mname]["check_events"] = True
             if not config.has_section(mname):
@@ -215,6 +216,9 @@ class Settings:
                                                     default="image")
                 score_treshold = zm_util.get_int_from_config(config, mname, "score_treshold", required=False,
                                                     default=score_treshold)
+                positive_detections_per_event_in_batch_limit= zm_util.get_int_from_config(config, mname,
+                                                "positive_detections_per_event_in_batch_limit", required=False,
+                                                    default=positive_detections_per_event_in_batch_limit)
 
             self.monitors[mname]["detect_objects"] = detect_objects
             self.monitors[mname]["detection_model"] = detection_model
@@ -222,3 +226,4 @@ class Settings:
             self.monitors[mname]["confidence_threshold"] = confidence_threshold
             self.monitors[mname]["detect_in"] = detect_in
             self.monitors[mname]["score_treshold"] = score_treshold
+            self.monitors[mname]["positive_detections_per_event_in_batch_limit"] = positive_detections_per_event_in_batch_limit

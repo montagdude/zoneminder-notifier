@@ -105,7 +105,7 @@ def get_new_pictures_list(score_treshold,monitor_id,latest_EventPictureID):
         with conn.cursor() as cursor:
             # Read data from database
 
-            sql = """select Frames.ID as ID,Frames.FrameID as FrameID,Events.ID as EventID,
+            sql = """select Frames.ID as ID,Frames.FrameID as FrameID,Frames.Score as Score,Events.ID as EventID,
                            Events.StartDateTime as StartDateTime,Events.DefaultVideo as VideoFile,  
                            Storage.Path as StoragePath
                     from   zm.Frames,zm.Events,zm.Storage
