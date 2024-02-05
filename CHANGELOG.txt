@@ -1,3 +1,8 @@
+0.3.0 [lubolura]
+    - events as well as frames are now selected from database only, not via API
+    - all frames/pictures within event with higher score than score_treshold is are now analyzed !
+    - in case of video analyse - video is analysed as soon as is created
+
 0.2.1 [lubolura]
     - the analyse triger is fired once the event is finished now (prevent missing video file error)
     - best (maxscored) image frame for analyse is selected from zoneminder database

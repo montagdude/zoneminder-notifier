@@ -1,12 +1,13 @@
 import sys
 import os
+from datetime import datetime
 from cv2 import imread
-from zm_util import debug,get_highest_scored_image
+from zm_util import debug,get_highest_scored_image,get_new_pictures_list
 
 
 class Monitor:
     def __init__(self, monitor_name, monitor_id, zmapi, detector=None, detect_objects=True,
-                 detect_in="image"):
+                 detect_in="image",score_treshold = 1):
         '''Initialize monitor with name, id, pointers to ZMAPI and detector instances, and detection
            settings'''
         self.name = monitor_name
@@ -15,6 +16,14 @@ class Monitor:
         self.detector = detector
         self.detect_objects = detect_objects
         self.detect_in = detect_in
+        self.ID_POSITION = 0
+        self.FRAME_ID_POSITION = 1
+        self.EVENT_ID_POSITION = 2
+        self.START_DATE_POSITION = 3
+        self.VIDEO_FILENAME_POSITION = 4
+        self.STORAGE_PATH_POSITION = 5
+
+        self.score_treshold = score_treshold
 
         # Sanity checks
         if self.detect_objects:
@@ -27,6 +36,10 @@ class Monitor:
 
         # Get latest event
         self.latest_event = self.api.getMonitorLatestEvent(self.id)
+
+        # to remember last processed point
+        self.latest_EventPictureID = -1
+        self.EventPicturesList = []
 
         # Save active state
         self.checkActive()
@@ -97,19 +110,35 @@ class Monitor:
 
         return ret
 
-    def detectObjects(self):
-        '''Detects objects in latest event. Returns: 
+    def getNewEventPicturesList(self):
+        '''Gets a new event from the MySQL.
+           An event is considered ready to be processed if:
+           1. It is different from the one already in memory.
+           2. The max score frame or alarm frame is available.'''
+
+        self.EventPicturesList = get_new_pictures_list(self.score_treshold, self.id, self.latest_EventPictureID)
+        if len(self.EventPicturesList) > 0:
+            self.latest_EventPictureID = self.EventPicturesList[-1][self.ID_POSITION] # last frame.ID
+
+    def get_filename_from_one_frame(self,one_frame):
+        return f"{one_frame[self.STORAGE_PATH_POSITION]}/{self.id}/{one_frame[self.START_DATE_POSITION].strftime('%Y-%m-%d')}/{one_frame[self.EVENT_ID_POSITION]}/{one_frame[self.FRAME_ID_POSITION]:05d}-capture.jpg"
+    def get_video_filename_from_one_frame(self,one_frame):
+        return f"{one_frame[self.STORAGE_PATH_POSITION]}/{self.id}/{one_frame[self.START_DATE_POSITION].strftime('%Y-%m-%d')}/{one_frame[self.EVENT_ID_POSITION]}/{one_frame[self.VIDEO_FILENAME_POSITION]}"
+
+
+    def detectObjects(self, _frame):
+        '''Detects objects in _frame. Returns:
            frame: the OpenCV frame object
            objclass: the class name of the object detected with highest confidence in the frame
            maxconfidence: the confidence of the object detected (0-1)'''
         frame = None
         objclass = ""
         maxconfidence = 0.0
-        # is there best image to analyse ?
-        if self.best_image_for_analyse == None:
-            self.debug("Event image not present on disk.")
+        if not self.detect_objects:
             return frame, objclass, maxconfidence
 
+
+        self.best_image_for_analyse = self.get_filename_from_one_frame(_frame)
         self.debug(f"Event image analyse started. {self.best_image_for_analyse}")
 
         # Open the max score frame. Since we've already checked that the file exists on disk,
@@ -118,13 +147,12 @@ class Monitor:
         frame = imread(self.best_image_for_analyse)
 
         # Return the max score frame if we're not doing object detection
-        if not self.detect_objects:
-            return frame, objclass, maxconfidence
 
         # Detect objects in video. We'll default to the max score image if there is a problem
         # reading the video.
         if self.detect_in == "video":
-            video_file = self.eventVideo(self.latest_event)
+            #video_file = self.eventVideo(self.latest_event)
+            video_file = self.get_video_filename_from_one_frame(_frame)
             if not os.path.isfile(video_file):
                 self.debug("Event video not present on disk. Detecting in max score frame instead.")
             else:

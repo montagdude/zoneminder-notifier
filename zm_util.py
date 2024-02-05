@@ -94,3 +94,36 @@ def get_highest_scored_image(event):
         sys.stderr.write(f"Error to get data from database : {e}\n")
         return -1
 
+
+def get_new_pictures_list(score_treshold,monitor_id,latest_EventPictureID):
+    try:
+        conn = mysql.connector.connect(host='localhost',
+                                       database='zm',
+                                       user='zmuser',
+                                       password='zmpass',
+                                       auth_plugin='mysql_native_password')
+        with conn.cursor() as cursor:
+            # Read data from database
+
+            sql = """select Frames.ID as ID,Frames.FrameID as FrameID,Events.ID as EventID,
+                           Events.StartDateTime as StartDateTime,Events.DefaultVideo as VideoFile,  
+                           Storage.Path as StoragePath
+                    from   zm.Frames,zm.Events,zm.Storage
+                    where  Frames.EventID = Events.ID
+                    and    Frames.Score >= {}
+                    and    Events.MonitorID = {}
+                    and    Frames.ID > {}
+                    and    (Events.StorageID+1) = Storage.ID
+                    order by Frames.ID""".format(score_treshold, monitor_id,latest_EventPictureID)
+            if (latest_EventPictureID==-1):
+                # just last one - init after start
+                sql = sql + " DESC LIMIT 1"
+            cursor.execute(sql)
+            rows = cursor.fetchall()
+            return rows if rows != None else []
+    except Exception as e:
+        sys.stderr.write(f"Error to get data from database : {e}\n")
+        return []
+
+
+

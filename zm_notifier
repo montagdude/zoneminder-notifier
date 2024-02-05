@@ -46,7 +46,7 @@ if __name__ == "__main__":
     st.readMonitorSettings(api_monitors)
 
     # Set up notifiers
-    notifier = Notification(st.tmp_message_file, st.tmp_analysis_image)
+    notifier = Notification()
 
     # Set up object detection
     monitors = []
@@ -142,6 +142,8 @@ if __name__ == "__main__":
                 monitor.checkActive()
                 monitor.getNewEvent()
 
+
+
         # Loop through all monitors to check for new events
         for monitor in monitors:
             if not monitor.active:
@@ -156,26 +158,22 @@ if __name__ == "__main__":
                               "stderr")
                 continue
 
+
+
             # Check for new event
-            if monitor.getNewEvent():
-                # Do object detection and get max score frame and detection info. If this monitor
-                # is not set to do detection, this method just returns the max score frame and some
-                # empty detection info.
-                frame, objclass, confidence = monitor.detectObjects()
+            monitor.getNewEventPicturesList()
+            for one_frame in monitor.EventPicturesList:
+                frame, objclass, confidence = monitor.detectObjects(one_frame)
 
                 # Set some data for the message
-                eventid = monitor.latest_event['id']
-                event_url = zmapi.getEventURL(eventid)
+                eventid = one_frame[monitor.EVENT_ID_POSITION]
+                event_url = "" # TODO zmapi.getEventURL(eventid)
                 msg_head = "Motion detected, {:s}, event {:d}.".format(monitor.name, eventid)
-                zm_util.debug(msg_head)
+                #zm_util.debug(msg_head)
                 msg_head += "\n" + event_url
-                msg_detect ="Detected {:s}, confidence {:.2f}"
+                msg_detect ="*** Detected {:s} *** confidence {:.2f}"
 
                 if frame is not None and notify:
-                    # Scale and save the image to send in the notification
-                    frame = resize_image(frame, st.analysis_image_size, preserve_aspect=True)
-                    cv2.imwrite(st.tmp_analysis_image, frame)
-
                     # Send notifications. Possible situations:
                     # 1) detection on and object detected -> send message
                     # 2) detection on and no object detected ->
@@ -185,10 +183,14 @@ if __name__ == "__main__":
                     if monitor.detect_objects:
                         # Send notifications if we detected something
                         if objclass != "":
+                            # Scale and save the image to send in the notification
+                            frame = resize_image(frame, st.analysis_image_size, preserve_aspect=True)
+                            tmp_analysis_filenames = f"{st.tmp_analysis_image[:-4]}_{eventid}_{one_frame[monitor.FRAME_ID_POSITION]}"
+                            cv2.imwrite(tmp_analysis_filenames+".jpg", frame)
                             msg_detect = msg_detect.format(objclass, confidence)
                             zm_util.debug(msg_detect)
                             msg = msg_head + "\n" + msg_detect
-                            notifier.sendNotifications(msg, st.to_addresses, st.pushover_data)
+                            notifier.sendNotifications(msg, st.to_addresses, st.pushover_data, tmp_analysis_filenames)
                         else:
                             zm_util.debug("No objects detected in event {:d}.".format(eventid))
                             # Send notifications even with no detections if requested
@@ -203,9 +205,11 @@ if __name__ == "__main__":
                     if frame is None:
                         zm_util.debug("No image. Skipping event {:d}.".format(eventid), "stderr")
                     elif not notify:
-                        msg = "In {:s} state; not sending notifications." \
-                              .format(active_runstate)
-                        zm_util.debug(msg)
+                        try:
+                            msg = "In {:s} state; not sending notifications.".format(active_runstate)
+                            zm_util.debug(msg)
+                        except Exception as e:
+                            zm_util.debug("Error : {}.".format(e), "stderr")
 
         # Wait for the next cycle
         time.sleep(st.running_timeout)

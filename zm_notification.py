@@ -1,12 +1,13 @@
+import os
 import subprocess
 import requests
 import time
 import zm_util
 
 class Notification:
-    def __init__(self, tmp_message_file, tmp_attachment):
-        self.message_file = tmp_message_file
-        self.attachment = tmp_attachment
+    def __init__(self):
+        #self.message_file = tmp_message_file
+        #self.attachment = tmp_attachment
         self.subject = "ZoneMinder event alert"
 
         # Keep track of the last time we received a 500 response from the API server.
@@ -14,7 +15,7 @@ class Notification:
         self.pushover_last_error = 0.
         self.pushover_error_timeout = 5.
 
-    def sendNotifications(self, msg, email_addresses=[], pushover_data=None):
+    def sendNotifications(self, msg, email_addresses=[], pushover_data=None,tmp_analysis_filename=None):
         '''Sends notifications. email_addresses is a list of dicts of the form:
            email_address["address"]: the email address
            email_address["image"]: True/False - whether to attach an image.
@@ -26,12 +27,12 @@ class Notification:
         # Email notifications
         if len(email_addresses) > 0:
             # Write the message
-            if not self.writeMessage(msg):
+            if not self.writeMessage(msg,tmp_analysis_filename+".txt"):
                 return False
 
             # Send emails
             for addr in email_addresses:
-                if not self.sendEmail(addr["address"], addr["image"]):
+                if not self.sendEmail(addr["address"], addr["image"],tmp_analysis_filename):
                     return False
 
         # Pushover API notifications
@@ -39,30 +40,43 @@ class Notification:
             api_token = pushover_data["api_token"]
             user_key = pushover_data["user_key"]
             attach_image = pushover_data["attach_image"]
-            return self.sendPushoverNotification(api_token, user_key, msg, attach_image)
+            return self.sendPushoverNotification(api_token, user_key, msg, attach_image,tmp_analysis_filename+".jpg")
+
+        try:
+            if os.path.isfile(tmp_analysis_filename+".txt"):
+                os.remove(tmp_analysis_filename+".txt")
+        except IOError:
+            zm_util.debug("Cannot delete {:s}.".format(tmp_analysis_filename+".txt"), "stderr")
+
+        try:
+            if os.path.isfile(tmp_analysis_filename + ".jpg"):
+                os.remove(tmp_analysis_filename + ".jpg")
+        except IOError:
+            zm_util.debug("Cannot delete {:s}.".format(tmp_analysis_filename + ".jpg"), "stderr")
 
         return True
 
-    def writeMessage(self, msg):
+    def writeMessage(self, msg,message_file):
         '''Writes message to tmp file'''
         try:
-            f = open(self.message_file, 'w')
+            f = open(message_file, 'w')
         except IOError:
-            zm_util.debug("Cannot write to {:s}.".format(self.message_file), "stderr")
+            zm_util.debug("Cannot write to {:s}.".format(message_file), "stderr")
             return False
         f.write(msg)
 
         return True
 
-    def sendEmail(self, address, attach_image=False):
+    def sendEmail(self, address, attach_image=False,tmp_analysis_filename = None):
         '''Sends an email to the specified address with mutt.'''
+        message_file = tmp_analysis_filename + ".txt"
         try:
-            f = open(self.message_file)
+            f = open(message_file)
         except IOError:
-            zm_util.debug("Cannot open {:s}.".format(self.message_file), "stderr")
+            zm_util.debug("Cannot open {:s}.".format(message_file), "stderr")
             return False
         if attach_image:
-            check = subprocess.run(['mutt', '-s', self.subject, '-a', self.attachment, '--',
+            check = subprocess.run(['mutt', '-s', self.subject, '-a', tmp_analysis_filename + ".jpg" , '--',
                                    address], stdin=f)
         else:
             check = subprocess.run(['mutt', '-s', self.subject, address], stdin=f)
@@ -70,7 +84,7 @@ class Notification:
         f.close()
         return check.returncode == 0
 
-    def sendPushoverNotification(self, api_token, user_key, msg, attach_image):
+    def sendPushoverNotification(self, api_token, user_key, msg, attach_image,tmp_analysis_image):
         '''Sends a notification via the Pushover API. Returns True if successful or False if not.'''
         url = "https://api.pushover.net/1/messages.json"
         data = {"token": api_token, "user": user_key, "title": self.subject, "message": msg}
@@ -87,7 +101,7 @@ class Notification:
         if attach_image:
             try:
                 f = open(self.attachment, "rb")
-                attachment_data = {"attachment": (self.attachment, f, "image/jpeg")}
+                attachment_data = {"attachment": (tmp_analysis_image, f, "image/jpeg")}
                 r = requests.post(url, data=data, files=attachment_data)
                 f.close()
             except IOError:
