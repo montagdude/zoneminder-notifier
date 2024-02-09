@@ -15,7 +15,7 @@ Requirements
 * ZoneMinder with API version 2.0 enabled (tested with ZoneMinder 1.36.32)
 * Python 3 (tested with version 3.10.6)
 * Python modules: setuptools, requests, cv2, numpy, matplotlib, mysql (mysql-connector-python)
-* Mutt (if you wish to send notifications via email)
+* Mutt (if you wish to send notifications via Mutt email)
 * Pushover account and api token (if you wish to send notifications via Pushover
   API)
 

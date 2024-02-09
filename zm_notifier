@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import sys
+import os
 import time
 import cv2
 import zm_util
@@ -25,6 +26,20 @@ def resize_image(frame, dim, preserve_aspect=False):
     imsize = (dimw, dimh)
     return cv2.resize(frame, imsize)
 
+def remove_tmp_files(tmp_analysis_filename):
+    if tmp_analysis_filename is not None:
+        try:
+            if os.path.isfile(tmp_analysis_filename + ".txt"):
+                os.remove(tmp_analysis_filename + ".txt")
+        except IOError:
+            zm_util.debug("Cannot delete {:s}.".format(tmp_analysis_filename + ".txt"), "stderr")
+
+        try:
+            if os.path.isfile(tmp_analysis_filename + ".jpg"):
+                os.remove(tmp_analysis_filename + ".jpg")
+        except IOError:
+            zm_util.debug("Cannot delete {:s}.".format(tmp_analysis_filename + ".jpg"), "stderr")
+
 
 if __name__ == "__main__":
     ################################################################################################
@@ -46,7 +61,7 @@ if __name__ == "__main__":
     st.readMonitorSettings(api_monitors)
 
     # Set up notifiers
-    notifier = Notification()
+    notifier = Notification(st)
 
     # Set up object detection
     monitors = []
@@ -228,6 +243,7 @@ if __name__ == "__main__":
                             zm_util.debug(msg_detect)
                             msg = msg_head + "\n" + msg_detect
                             notifier.sendNotifications(msg, st.to_addresses, st.pushover_data, tmp_analysis_filenames)
+                            remove_tmp_files(tmp_analysis_filenames)
                         else:
                             zm_util.debug("No objects detected in {}.".format(current_frame[monitor.STATS_TO_PRINT]))
                             # Send notifications even with no detections if requested

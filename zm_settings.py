@@ -53,6 +53,17 @@ class Settings:
         self.no_notification_runstate = zm_util.get_from_config(config, section,
                                              "no_notification_runstate", required=False, default="")
 
+        # which way to send e-mails ?
+        self.email_client = zm_util.get_from_config(config, section, "email_client", required=False,
+                                            default="mutt")
+        self.smtp_server = zm_util.get_from_config(config, section, "smtp_server",
+                                            required=False, default="")
+        self.smtp_usr = zm_util.get_from_config(config, section, "smtp_usr",
+                                                  required=False, default="")
+        self.smtp_pwd = zm_util.get_from_config(config, section, "smtp_pwd",
+                                                  required=False, default="")
+
+
         # Convert email addresses and attachment settings to lists
         if addresses != "":
             addresses = addresses.replace(" ","").split(",")

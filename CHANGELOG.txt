@@ -1,3 +1,6 @@
+0.3.1 [lubolura]
+    - send emails with python smtplib option is added ( no need Mutt )
+
 0.3.0 [lubolura]
     - continous frames analyze
     - the analyze triger is fired once the event is started now (it allows continous frames analyze)

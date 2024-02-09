@@ -3,11 +3,16 @@ import subprocess
 import requests
 import time
 import zm_util
+import smtplib,ssl
+from email.mime.text import MIMEText
+from email.mime.image import MIMEImage
+from email.mime.multipart import MIMEMultipart
 
 class Notification:
-    def __init__(self):
+    def __init__(self,st):
         #self.message_file = tmp_message_file
         #self.attachment = tmp_attachment
+        self.setup = st
         self.subject = "ZoneMinder event alert"
 
         # Keep track of the last time we received a 500 response from the API server.
@@ -32,8 +37,14 @@ class Notification:
 
             # Send emails
             for addr in email_addresses:
-                if not self.sendEmail(addr["address"], addr["image"],tmp_analysis_filename):
-                    return False
+                #start_time = time.time()
+                if self.setup.email_client == "mutt":
+                    if not self.sendEmail_mutt(addr["address"], addr["image"],tmp_analysis_filename):
+                        return False
+                else:
+                    if not self.sendEmail_smtp(addr["address"], addr["image"],tmp_analysis_filename):
+                        return False
+                #print("Time spend to send email {} seconds ---".format(time.time() - start_time))
 
         # Pushover API notifications
         if pushover_data is not None:
@@ -41,18 +52,6 @@ class Notification:
             user_key = pushover_data["user_key"]
             attach_image = pushover_data["attach_image"]
             return self.sendPushoverNotification(api_token, user_key, msg, attach_image,tmp_analysis_filename+".jpg")
-
-        try:
-            if os.path.isfile(tmp_analysis_filename+".txt"):
-                os.remove(tmp_analysis_filename+".txt")
-        except IOError:
-            zm_util.debug("Cannot delete {:s}.".format(tmp_analysis_filename+".txt"), "stderr")
-
-        try:
-            if os.path.isfile(tmp_analysis_filename + ".jpg"):
-                os.remove(tmp_analysis_filename + ".jpg")
-        except IOError:
-            zm_util.debug("Cannot delete {:s}.".format(tmp_analysis_filename + ".jpg"), "stderr")
 
         return True
 
@@ -67,7 +66,7 @@ class Notification:
 
         return True
 
-    def sendEmail(self, address, attach_image=False,tmp_analysis_filename = None):
+    def sendEmail_mutt(self, address, attach_image=False,tmp_analysis_filename = None):
         '''Sends an email to the specified address with mutt.'''
         message_file = tmp_analysis_filename + ".txt"
         try:
@@ -116,3 +115,48 @@ class Notification:
             self.pushover_last_error = time.time()
             return False
         return True
+
+
+
+    def sendEmail_smtp(self, address, attach_image=False,tmp_analysis_filename = None):
+        '''Sends an email to the specified address with smtp.'''
+
+        msg = MIMEMultipart()
+        msg['Subject'] = self.subject
+        msg['From'] = self.setup.smtp_usr
+        msg['To'] = address
+
+        if tmp_analysis_filename is not None:
+            try:
+                with open(tmp_analysis_filename + ".txt", 'rb') as f:
+                    txt_data = f.read()
+                text = MIMEText(txt_data,_charset="utf-8")
+                msg.attach(text)
+            except Exception as e:
+                zm_util.debug("Cannot process file {} : {}.".format(tmp_analysis_filename + ".txt",e), "stderr")
+                return False
+
+            if attach_image:
+                try:
+                    with open(tmp_analysis_filename + ".jpg", 'rb') as f:
+                        img_data = f.read()
+                    image = MIMEImage(img_data, name=os.path.basename(tmp_analysis_filename + ".jpg"))
+                    msg.attach(image)
+                except Exception as e:
+                    zm_util.debug("Cannot process file {} : {}.".format(tmp_analysis_filename + ".txt",e), "stderr")
+                    return False
+
+        try:
+            context = ssl.create_default_context()
+            with smtplib.SMTP(self.setup.smtp_server) as server:
+                server.ehlo()  # Can be omitted
+                server.starttls(context=context)
+                server.ehlo()  # Can be omitted
+                server.login(self.setup.smtp_usr, self.setup.smtp_pwd)
+                server.sendmail(msg['From'], msg['To'], msg.as_string())
+        except Exception as e:
+            zm_util.debug("Cannot send email: {}.".format(e), "stderr")
+            return False
+
+        return True
+
