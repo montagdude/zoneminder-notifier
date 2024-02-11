@@ -136,13 +136,14 @@ def get_new_pictures_list(score_treshold,monitor_id,latest_EventPictureID,detect
             sql = """select Frames.ID as ID,Frames.FrameID as FrameID,Frames.Score as Score,Events.ID as EventID,
                            Events.StartDateTime as StartDateTime,Events.DefaultVideo as VideoFile,  
                            Storage.Path as StoragePath
-                    from   zm.Frames,zm.Events,zm.Storage
+                    from   zm.Frames,zm.Events,zm.Storage,zm.Monitors
                     where  Frames.EventID = Events.ID
+                    and    Monitors.ID = {}
                     and    Frames.Score >= {}
                     and    Events.MonitorID = {}
                     and    Frames.ID {}
-                    and    (Events.StorageID+1) = Storage.ID
-                    order by Frames.ID""".format(score_treshold, monitor_id,frames_selection)
+                    and    Storage.ID = Monitors.StorageID 
+                    order by Frames.ID""".format(monitor_id, score_treshold, monitor_id,frames_selection)
             if (latest_EventPictureID==-1):
                 # just last one - init after start
                 sql = sql + " desc limit 1"

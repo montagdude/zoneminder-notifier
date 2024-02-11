@@ -159,8 +159,14 @@ if __name__ == "__main__":
 
         #just prepare format for message
         msg_detect = "*** Detected {:s} *** confidence {:.2f}"
+        zm_util.debug(f"Checking events for {len(monitors)} monitors.",
+                      "stdout")
+
         # Loop through all monitors to check for new events
         for monitor in monitors:
+            zm_util.debug(f"Last event for monitor {monitor.name} was  {monitor.latest_EventPictureID} .",
+                          "stdout")
+
             if not monitor.active:
                 # Check if previously inactive monitor has become active, then continue to the next
                 # monitor.
