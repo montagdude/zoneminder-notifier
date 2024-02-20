@@ -1,3 +1,6 @@
+0.3.3 [lubolura]
+    - code cleaning
+
 0.3.2 [lubolura]
     - fixed error to select data from database (StorageID is from Monitors correctly, not from Events !)
 

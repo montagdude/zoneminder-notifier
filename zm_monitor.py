@@ -146,11 +146,9 @@ class Monitor:
         # just prepare for future usage if video was analysed or we have to again in next batch
         processed_flag = True if self.detect_in == "image" else False
 
-        if not self.detect_objects:
-            return frame, objclass, maxconfidence,processed_flag
-
         # construct correct filename and check if it exists
         self.current_frame_for_analyse = self.get_filename_from_one_frame(_frame)
+
         if not os.path.isfile(self.current_frame_for_analyse):
             self.debug(f"Cannot open frame file . ({_frame[self.STATS_TO_PRINT]} : {self.current_frame_for_analyse})")
             return frame, objclass, maxconfidence,processed_flag

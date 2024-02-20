@@ -127,6 +127,7 @@ class Notification:
         msg['To'] = address
 
         if tmp_analysis_filename is not None:
+            zm_util.debug("Constructing email to {} :  {}".format(address,tmp_analysis_filename+'.txt' ), "stdout")
             try:
                 with open(tmp_analysis_filename + ".txt", 'rb') as f:
                     txt_data = f.read()
@@ -137,6 +138,7 @@ class Notification:
                 return False
 
             if attach_image:
+                zm_util.debug("+ picture file  {}".format(tmp_analysis_filename + '.jpg'), "stdout")
                 try:
                     with open(tmp_analysis_filename + ".jpg", 'rb') as f:
                         img_data = f.read()
@@ -145,18 +147,27 @@ class Notification:
                 except Exception as e:
                     zm_util.debug("Cannot process file {} : {}.".format(tmp_analysis_filename + ".txt",e), "stderr")
                     return False
+            zm_util.debug("Constructing email result : OK ", "stdout")
 
         try:
             context = ssl.create_default_context()
+            zm_util.debug("SSL Context is created ", "stdout")
             with smtplib.SMTP(self.setup.smtp_server) as server:
+                zm_util.debug("SMTP : Start OK", "stdout")
                 server.ehlo()  # Can be omitted
+                zm_util.debug("SMTP : ehlo OK", "stdout")
                 server.starttls(context=context)
+                zm_util.debug("SMTP : starttls OK ", "stdout")
                 server.ehlo()  # Can be omitted
+                zm_util.debug("SMTP : ehlo OK", "stdout")
                 server.login(self.setup.smtp_usr, self.setup.smtp_pwd)
+                zm_util.debug("SMTP : login OK", "stdout")
                 server.sendmail(msg['From'], msg['To'], msg.as_string())
+                zm_util.debug("SMTP : sendmail OK. ", "stdout")
         except Exception as e:
             zm_util.debug("Cannot send email: {}.".format(e), "stderr")
             return False
 
+        zm_util.debug("[sendEmail_smtp] OK. ", "stdout")
         return True
 
