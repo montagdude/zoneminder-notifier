@@ -191,7 +191,7 @@ class DetectorBase:
         cap = cv2.VideoCapture(video_file)
         if not cap.isOpened():
             sys.stderr.write("Error opening video file {:s}.\n".format(video_file))
-            return bestframe, bestclasses, bestconfidences
+            return bestframe, bestclasses, bestconfidences, False
 
         success, frame = cap.read()
         width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
@@ -253,7 +253,7 @@ class DetectorBase:
         classnames = []
         if bestframe is not None:
             classnames = [self.classes[idx] for idx in bestclasses]
-        return bestframe, classnames, bestconfidences
+        return bestframe, classnames, bestconfidences, True
 
 
 class DetectorDarknet(DetectorBase):

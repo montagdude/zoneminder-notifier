@@ -172,7 +172,7 @@ class ZMAPI:
                     monitor['id'] = int(item['Monitor_Status']['MonitorId'])
                     monitor['name'] = item['Monitor']['Name']
                 except TypeError:
-                    self.debug(1, "No data available for monitor. Skipping.")
+                    self.debug(1, f"No data available for monitor {item['Monitor']['Name']}. Skipping.")
                     continue
                 if active_only:
                     if self.getMonitorDaemonStatus(monitor['id']):

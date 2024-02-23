@@ -53,6 +53,17 @@ class Settings:
         self.no_notification_runstate = zm_util.get_from_config(config, section,
                                              "no_notification_runstate", required=False, default="")
 
+        # which way to send e-mails ?
+        self.email_client = zm_util.get_from_config(config, section, "email_client", required=False,
+                                            default="mutt")
+        self.smtp_server = zm_util.get_from_config(config, section, "smtp_server",
+                                            required=False, default="")
+        self.smtp_usr = zm_util.get_from_config(config, section, "smtp_usr",
+                                                  required=False, default="")
+        self.smtp_pwd = zm_util.get_from_config(config, section, "smtp_pwd",
+                                                  required=False, default="")
+
+
         # Convert email addresses and attachment settings to lists
         if addresses != "":
             addresses = addresses.replace(" ","").split(",")
@@ -193,6 +204,8 @@ class Settings:
             detection_model = ""
             detect_classes = []
             confidence_threshold = 0.4
+            score_treshold = 1
+            positive_detections_per_event_in_batch_limit = 1
             detect_in = ""
             self.monitors[mname]["check_events"] = True
             if not config.has_section(mname):
@@ -212,8 +225,16 @@ class Settings:
                                                 "confidence_threshold", required=False, default=0.4)
                 detect_in = zm_util.get_from_config(config, mname, "detect_in", required=False,
                                                     default="image")
+                score_treshold = zm_util.get_int_from_config(config, mname, "score_treshold", required=False,
+                                                    default=score_treshold)
+                positive_detections_per_event_in_batch_limit= zm_util.get_int_from_config(config, mname,
+                                                "positive_detections_per_event_in_batch_limit", required=False,
+                                                    default=positive_detections_per_event_in_batch_limit)
+
             self.monitors[mname]["detect_objects"] = detect_objects
             self.monitors[mname]["detection_model"] = detection_model
             self.monitors[mname]["detect_classes"] = detect_classes
             self.monitors[mname]["confidence_threshold"] = confidence_threshold
             self.monitors[mname]["detect_in"] = detect_in
+            self.monitors[mname]["score_treshold"] = score_treshold
+            self.monitors[mname]["positive_detections_per_event_in_batch_limit"] = positive_detections_per_event_in_batch_limit
