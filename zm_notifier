@@ -157,11 +157,14 @@ if __name__ == "__main__":
                 monitor.checkActive()
                 monitor.getNewEvent()
 
+            notifier.sendNotifications(f"Started. Checking events for {len(monitors)} monitors.", st.to_addresses,
+                                       None, st.tmp_message_file[:-4])
 
         #just prepare format for message
         msg_detect = "*** Detected {:s} *** confidence {:.2f}"
-        zm_util.debug(f"Checking events for {len(monitors)} monitors.",
-                      "stdout")
+        _msg = f"Started. Checking events for {len(monitors)} monitors."
+        zm_util.debug(_msg, "stdout")
+
 
         # Loop through all monitors to check for new events
         for monitor in monitors:
@@ -183,26 +186,13 @@ if __name__ == "__main__":
             if not monitor.detect_objects:
                 # nothing to do
                 msg_head = "Motion detected, {:s}.".format(monitor.name)
-                #zm_util.debug(msg_head)
-                #msg_head += "\n" + event_url
                 notifier.sendNotifications(msg_head, st.to_addresses, st.pushover_data)
                 continue
 
             # Check for new event
             monitor.getNewEventPicturesList()
-            if len(monitor.EventPicturesList) >0 :
+            if len(monitor.EventPicturesList) > 0 :
                 zm_util.debug(f"--> New batch processing started ( size : {len(monitor.EventPicturesList)} )")
-            # else:
-            #     ID_POSITION = 0
-            #     FRAME_ID_POSITION = 1
-            #     FRAME_SCORE = 2
-            #     EVENT_ID_POSITION = 3
-            #     START_DATE_POSITION = 4
-            #     VIDEO_FILENAME_POSITION = 5
-            #     STORAGE_PATH_POSITION = 6
-            #     STATS_TO_PRINT = 7
-            #     monitor.EventPicturesList = []
-            #     monitor.EventPicturesList.append([1,1,5,2612,datetime(2024,2,16),'','/home/vameli/PycharmProjects/zoneminder-notifier/sample_images','AAA'])
             current_event_id = 0
             for _index in range(len(monitor.EventPicturesList)):
 
@@ -214,9 +204,9 @@ if __name__ == "__main__":
                     current_event_id = current_frame[monitor.EVENT_ID_POSITION]
 
                 # enhance printing with some figures :-)
-                current_frame = current_frame + [f"event {current_event_id}, {_index + 1}/"
+                current_frame = list(current_frame)+ list([f"event {current_event_id}, {_index + 1}/"
                                                  f"{len(monitor.EventPicturesList)} "
-                                                 f"scored {current_frame[monitor.FRAME_SCORE]}"]
+                                                 f"scored {current_frame[monitor.FRAME_SCORE]}"])
 
                 # check if its enough within this event/batch
                 if positive_detections_in_current_event >= monitor.positive_detections_per_event_in_batch_limit:
@@ -246,7 +236,6 @@ if __name__ == "__main__":
                 # Set some data for the message
                 event_url = "" # TODO zmapi.getEventURL(eventid)
                 msg_head = "Motion detected, {:s}, event {:d}.".format(monitor.name, current_event_id)
-                #zm_util.debug(msg_head)
                 msg_head += "\n" + event_url
 
                 if frame is not None and notify:

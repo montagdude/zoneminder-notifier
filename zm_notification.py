@@ -20,7 +20,7 @@ class Notification:
         self.pushover_last_error = 0.
         self.pushover_error_timeout = 5.
 
-    def sendNotifications(self, msg, email_addresses=[], pushover_data=None,tmp_analysis_filename=None):
+    def sendNotifications(self, msg, email_addresses, pushover_data=None,tmp_analysis_filename=None):
         '''Sends notifications. email_addresses is a list of dicts of the form:
            email_address["address"]: the email address
            email_address["image"]: True/False - whether to attach an image.
@@ -29,11 +29,15 @@ class Notification:
             "user_key": pushover_user_key,
             "attach_image": True/False}'''
 
+        if email_addresses is None:
+           return False
+
         # Email notifications
         if len(email_addresses) > 0:
-            # Write the message
-            if not self.writeMessage(msg,tmp_analysis_filename+".txt"):
-                return False
+            if tmp_analysis_filename is not None:
+                # Write the message
+                if not self.writeMessage(msg,tmp_analysis_filename+".txt"):
+                    return False
 
             # Send emails
             for addr in email_addresses:
@@ -74,7 +78,7 @@ class Notification:
         except IOError:
             zm_util.debug("Cannot open {:s}.".format(message_file), "stderr")
             return False
-        if attach_image:
+        if attach_image and os.path.isfile(tmp_analysis_filename + ".jpg"):
             check = subprocess.run(['mutt', '-s', self.subject, '-a', tmp_analysis_filename + ".jpg" , '--',
                                    address], stdin=f)
         else:
@@ -127,43 +131,38 @@ class Notification:
         msg['To'] = address
 
         if tmp_analysis_filename is not None:
-            zm_util.debug("Constructing email to {} :  {}".format(address,tmp_analysis_filename+'.txt' ), "stdout")
+            zm_util.debug("Constructing email to {}".format(address), "stdout")
             try:
-                with open(tmp_analysis_filename + ".txt", 'rb') as f:
-                    txt_data = f.read()
-                text = MIMEText(txt_data,_charset="utf-8")
-                msg.attach(text)
+                if os.path.isfile(tmp_analysis_filename + ".txt"):
+                    with open(tmp_analysis_filename + ".txt", 'rb') as f:
+                        txt_data = f.read()
+                        text = MIMEText(txt_data,_charset="utf-8")
+                        msg.attach(text)
             except Exception as e:
                 zm_util.debug("Cannot process file {} : {}.".format(tmp_analysis_filename + ".txt",e), "stderr")
                 return False
 
             if attach_image:
-                zm_util.debug("+ picture file  {}".format(tmp_analysis_filename + '.jpg'), "stdout")
                 try:
-                    with open(tmp_analysis_filename + ".jpg", 'rb') as f:
-                        img_data = f.read()
-                    image = MIMEImage(img_data, name=os.path.basename(tmp_analysis_filename + ".jpg"))
-                    msg.attach(image)
+                    if os.path.isfile(tmp_analysis_filename + ".jpg"):
+                        with open(tmp_analysis_filename + ".jpg", 'rb') as f:
+                            img_data = f.read()
+                            image = MIMEImage(img_data, name=os.path.basename(tmp_analysis_filename + ".jpg"))
+                            msg.attach(image)
                 except Exception as e:
                     zm_util.debug("Cannot process file {} : {}.".format(tmp_analysis_filename + ".txt",e), "stderr")
                     return False
             zm_util.debug("Constructing email result : OK ", "stdout")
 
+        zm_util.debug("[sendEmail_smtp] Sending email", "stdout")
         try:
             context = ssl.create_default_context()
-            zm_util.debug("SSL Context is created ", "stdout")
             with smtplib.SMTP(self.setup.smtp_server) as server:
-                zm_util.debug("SMTP : Start OK", "stdout")
                 server.ehlo()  # Can be omitted
-                zm_util.debug("SMTP : ehlo OK", "stdout")
                 server.starttls(context=context)
-                zm_util.debug("SMTP : starttls OK ", "stdout")
                 server.ehlo()  # Can be omitted
-                zm_util.debug("SMTP : ehlo OK", "stdout")
                 server.login(self.setup.smtp_usr, self.setup.smtp_pwd)
-                zm_util.debug("SMTP : login OK", "stdout")
                 server.sendmail(msg['From'], msg['To'], msg.as_string())
-                zm_util.debug("SMTP : sendmail OK. ", "stdout")
         except Exception as e:
             zm_util.debug("Cannot send email: {}.".format(e), "stderr")
             return False
