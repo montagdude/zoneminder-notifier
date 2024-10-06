@@ -169,7 +169,7 @@ class ZMAPI:
             for item in rj['monitors']:
                 monitor = {}
                 try:
-                    monitor['id'] = int(item['Monitor_Status']['MonitorId'])
+                    monitor['id'] = int(item['Monitor']['Id'])
                     monitor['name'] = item['Monitor']['Name']
                 except TypeError:
                     self.debug(1, "No data available for monitor. Skipping.")
