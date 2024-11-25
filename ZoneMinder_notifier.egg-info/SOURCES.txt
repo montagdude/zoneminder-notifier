@@ -1,0 +1,13 @@
+LICENSE
+README.md
+setup.py
+zm_api.py
+zm_monitor.py
+zm_notification.py
+zm_object_detection.py
+zm_settings.py
+zm_util.py
+ZoneMinder_notifier.egg-info/PKG-INFO
+ZoneMinder_notifier.egg-info/SOURCES.txt
+ZoneMinder_notifier.egg-info/dependency_links.txt
+ZoneMinder_notifier.egg-info/top_level.txt

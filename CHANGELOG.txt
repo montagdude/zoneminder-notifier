@@ -1,0 +1,36 @@
+0.3.3 [lubolura]
+    - code cleaning
+
+0.3.2 [lubolura]
+    - fixed error to select data from database (StorageID is from Monitors correctly, not from Events !)
+
+0.3.1 [lubolura]
+    - send emails with python smtplib option is added ( no need Mutt )
+
+0.3.0 [lubolura]
+    - continuous frames analyze
+    - the analyze trigger is fired once the event is started now (it allows continuous frames analyze)
+    - events as well as frames are now selected from database, not via API
+    - in case of video analyze - video is analyzed as soon as is created
+
+    - score_threshold in cfg file :
+      when there is "detect_in: image", the "score_threshold" filter is applied for
+      all available images. Images with higher score than this, are continuously
+      analyzed as soon as they are available. It should be range 0-255.
+      If score_threshold is set to 0, all images are analyzed
+      (this is demand/impact to computer performance in this case! ).
+      the default value is 1
+
+    - positive_detections_per_event_in_batch_limit in cfg file :
+      how many positive detections / frames interrupt continuous frames analyze process (in one batch per one event).
+      Batch size depends on [Daemon] section setup, each round means one batch in this case
+      ( it can be that one event has multiple batches, in case that event takes longer than one round)
+      the default value is 1
+
+
+0.2.1 [lubolura]
+    - the analyse trigger is fired once the event is finished now (prevent missing video file error)
+    - best (maxscored) image frame for analyse is selected from zoneminder database
+
+0.2
+    -
